@@ -153,7 +153,10 @@ export async function resolveRuntimeConfig({ argv = [], cwd = process.cwd(), con
   }
 
   let configPath = null;
-  let config = mergeConfig(DEFAULTS, configObject);
+  let config = mergeConfig({
+    ...DEFAULTS,
+    port: process.env.PORT || DEFAULTS.port,
+  }, configObject);
 
   if (flags.config) {
     configPath = path.resolve(cwd, flags.config);

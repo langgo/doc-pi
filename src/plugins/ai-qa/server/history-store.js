@@ -32,24 +32,30 @@
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../../../core/server/config.js';
+import { getRuntimeConfig } from '../../../core/server/runtime-state.js';
 
-const DATA_DIR = path.join(ROOT_DIR, 'data', 'ai-qa');
-const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+function dataDir() {
+  return getRuntimeConfig().aiQa.historyDir;
+}
+
+function sessionsFile() {
+  return path.join(dataDir(), 'sessions.json');
+}
 
 async function ensureDir() {
-  if (!existsSync(DATA_DIR)) {
-    await mkdir(DATA_DIR, { recursive: true });
+  const dir = dataDir();
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
   }
 }
 
 async function readStore() {
   await ensureDir();
-  if (!existsSync(SESSIONS_FILE)) {
+  if (!existsSync(sessionsFile())) {
     return { version: 1, sessions: [] };
   }
   try {
-    const raw = await readFile(SESSIONS_FILE, 'utf-8');
+    const raw = await readFile(sessionsFile(), 'utf-8');
     const data = JSON.parse(raw);
     return data && data.version === 1 ? data : { version: 1, sessions: [] };
   } catch {
@@ -60,10 +66,11 @@ async function readStore() {
 async function writeStore(data) {
   await ensureDir();
   // Atomic write: write to temp file then rename
-  const tmp = SESSIONS_FILE + '.tmp';
+  const file = sessionsFile();
+  const tmp = file + '.tmp';
   await writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8');
   const { rename } = await import('fs/promises');
-  await rename(tmp, SESSIONS_FILE);
+  await rename(tmp, file);
 }
 
 // ── Public API ──────────────────────────────────────────────────────────

@@ -1,19 +1,22 @@
 import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../../../core/server/config.js';
+import { getRuntimeConfig } from '../../../core/server/runtime-state.js';
 
-const COMMENTS_DIR = path.join(ROOT_DIR, 'data', 'comments');
+function commentsDir() {
+  return getRuntimeConfig().comments.dataDir;
+}
 
 async function ensureDir() {
-  if (!existsSync(COMMENTS_DIR)) {
-    await mkdir(COMMENTS_DIR, { recursive: true });
+  const dir = commentsDir();
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
   }
 }
 
 function jsonFile(file) {
   const base = path.basename(file, '.md');
-  return path.join(COMMENTS_DIR, `${base}.json`);
+  return path.join(commentsDir(), `${base}.json`);
 }
 
 export async function loadComments(file) {
@@ -40,13 +43,13 @@ export async function getCommentSummary() {
   const chapters = [];
   let entries;
   try {
-    entries = await readdir(COMMENTS_DIR);
+    entries = await readdir(commentsDir());
   } catch {
     return chapters;
   }
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
-    const jsonPath = path.join(COMMENTS_DIR, entry);
+    const jsonPath = path.join(commentsDir(), entry);
     let data;
     try {
       data = JSON.parse(await readFile(jsonPath, 'utf-8'));

@@ -1,11 +1,11 @@
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { ROOT_DIR } from './config.js';
+import { getContentRoot } from './runtime-state.js';
 
-// Resolve and validate file path is within project directory
-export function resolveSafePath(targetPath) {
+// Resolve and validate file path is within the configured content directory
+export function resolveSafePath(targetPath, rootDir = getContentRoot()) {
   const resolved = path.resolve(targetPath);
-  const root = path.resolve(ROOT_DIR);
+  const root = path.resolve(rootDir);
   if (resolved === root) return root;
   if (!resolved.startsWith(root + path.sep)) {
     return null;

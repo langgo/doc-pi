@@ -1,16 +1,21 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { registerPlugin, getPlugins, tryPluginApiRoutes, collectPluginInjections } from '../plugins.js';
+import { registerPlugin, getPlugins, resetPlugins, tryPluginApiRoutes, collectPluginInjections } from '../plugins.js';
 
-// Reset plugins before each test
 beforeEach(() => {
-  // Clear plugins array by re-importing — but since it's a module-level array,
-  // we need to work with the existing one. The getPlugins() returns the same array.
-  const plugins = getPlugins();
-  plugins.length = 0;
+  resetPlugins();
 });
 
 describe('plugins', () => {
-  describe('registerPlugin / getPlugins', () => {
+  describe('registerPlugin / getPlugins / resetPlugins', () => {
+    it('should reset registered plugins', () => {
+      registerPlugin({ name: 'old-plugin' });
+      expect(getPlugins()).toHaveLength(1);
+
+      resetPlugins();
+
+      expect(getPlugins()).toHaveLength(0);
+    });
+
     it('should register and retrieve plugins', () => {
       const plugin = { name: 'test', apiRoutes: [] };
       registerPlugin(plugin);

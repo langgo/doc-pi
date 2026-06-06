@@ -2,7 +2,7 @@ import ejs from 'ejs';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { SITE_TITLE } from './config.js';
+import { getRuntimeConfig } from './runtime-state.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,7 +23,7 @@ export function renderHtml({ title, content, tocHtml, currentFile, showViewToggl
 
   return ejs.render(template, {
     title,
-    siteTitle: SITE_TITLE,
+    siteTitle: getRuntimeConfig().siteTitle,
     content,
     tocHtml,
     currentFile,

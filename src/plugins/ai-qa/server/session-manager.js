@@ -16,7 +16,7 @@
 //   - History replay for persistent conversations
 
 import { createAgentSession, SessionManager } from '@oh-my-pi/pi-coding-agent';
-import { ROOT_DIR } from '../../../core/server/config.js';
+import { getContentRoot } from '../../../core/server/runtime-state.js';
 import { getChapterFiles } from '../../../core/server/navigation.js';
 import * as historyStore from './history-store.js';
 
@@ -123,7 +123,7 @@ async function createRuntimeSession(conversationId, historyMessages) {
       enableMCP: false,
       enableLsp: false,
       disableExtensionDiscovery: true,
-      cwd: ROOT_DIR,
+      cwd: getContentRoot(),
       agentDir,
     });
   } catch (err) {

@@ -1,10 +1,26 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { mkdtemp, rm, writeFile } from 'fs/promises';
+import path from 'path';
+import { tmpdir } from 'os';
 import { getChapterFiles, getChapterNav, buildFileListToc } from '../navigation.js';
+
+let fixtureRoot;
+
+beforeAll(async () => {
+  fixtureRoot = await mkdtemp(path.join(tmpdir(), 'doc-pi-nav-'));
+  await writeFile(path.join(fixtureRoot, '02-B.md'), '# B\n');
+  await writeFile(path.join(fixtureRoot, '01-A.md'), '# A\n');
+  await writeFile(path.join(fixtureRoot, 'README.md'), '# Readme\n');
+});
+
+afterAll(async () => {
+  if (fixtureRoot) await rm(fixtureRoot, { recursive: true, force: true });
+});
 
 describe('navigation', () => {
   describe('getChapterFiles', () => {
     it('should return sorted chapter files matching pattern', async () => {
-      const files = await getChapterFiles();
+      const files = await getChapterFiles(fixtureRoot);
       expect(Array.isArray(files)).toBe(true);
       expect(files.length).toBeGreaterThan(0);
       // All should match NN-xxx.md pattern
@@ -52,7 +68,7 @@ describe('navigation', () => {
 
   describe('buildFileListToc', () => {
     it('should build HTML list of chapter files', async () => {
-      const html = await buildFileListToc();
+      const html = await buildFileListToc(fixtureRoot);
       expect(html).toContain('<ul>');
       expect(html).toContain('toc-h1');
       // Should not include README.md or AGENTS.md

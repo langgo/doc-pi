@@ -21,6 +21,10 @@ export function registerPlugin(plugin) {
   plugins.push(plugin);
 }
 
+export function resetPlugins() {
+  plugins.length = 0;
+}
+
 export function getPlugins() {
   return plugins;
 }

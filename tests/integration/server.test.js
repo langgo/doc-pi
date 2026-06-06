@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import path from 'path';
-import { ROOT_DIR } from '../../src/core/server/config.js';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const FIXTURE_ROOT = path.join(PROJECT_ROOT, 'tests', 'fixtures');
 
 let serverProcess;
 const BASE_URL = 'http://localhost:3099';
@@ -10,8 +14,8 @@ function fetchUrl(path) {
 }
 
 beforeAll(async () => {
-  serverProcess = Bun.spawn(['bun', 'run', 'src/server.js'], {
-    cwd: ROOT_DIR,
+  serverProcess = Bun.spawn(['bun', 'run', 'src/server.js', '--root', FIXTURE_ROOT], {
+    cwd: PROJECT_ROOT,
     env: { ...process.env, PORT: '3099' },
     stdout: 'pipe',
     stderr: 'pipe',
@@ -37,21 +41,23 @@ describe('HTTP routing integration', () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toContain('<!DOCTYPE html>');
-    expect(text).toContain('ElasticSearch');
+    expect(text).toContain('Fixtures');
   });
 
-  it('GET /01-概述.md should return 200 with HTML', async () => {
-    const res = await fetchUrl('/01-概述.md');
+  it('GET /sample-chapter.md should render fixture markdown from --root', async () => {
+    const res = await fetchUrl('/sample-chapter.md');
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toContain('<!DOCTYPE html>');
+    expect(text).toContain('Sample Chapter for Testing');
+    expect(text).toContain('<strong>bold</strong>');
   });
 
-  it('GET /01-概述.md?raw should return plain text', async () => {
-    const res = await fetchUrl('/01-概述.md?raw');
+  it('GET /sample-chapter.md?raw should return fixture plain text', async () => {
+    const res = await fetchUrl('/sample-chapter.md?raw');
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).toContain('#');
+    expect(text).toContain('# Sample Chapter for Testing');
   });
 
   it('GET /core/public/style.css should return CSS', async () => {
@@ -73,6 +79,13 @@ describe('HTTP routing integration', () => {
     expect(res.status).toBe(200);
     const contentType = res.headers.get('content-type');
     expect(contentType).toContain('text/css');
+  });
+
+  it('GET /plugins/comments/client/comment.js should return JS from package assets while --root is fixtures', async () => {
+    const res = await fetchUrl('/plugins/comments/client/comment.js');
+    expect(res.status).toBe(200);
+    const contentType = res.headers.get('content-type');
+    expect(contentType).toContain('application/javascript');
   });
 
   it('GET /nonexistent.md should return 404', async () => {

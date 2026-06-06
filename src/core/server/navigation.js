@@ -1,10 +1,10 @@
 import { readdir } from 'fs/promises';
-import { ROOT_DIR } from './config.js';
+import { getContentRoot } from './runtime-state.js';
 import { escapeHtml } from './render.js';
 
 // Auto-discover chapter files from filesystem (sorted by filename)
-export async function getChapterFiles() {
-  const files = await readdir(ROOT_DIR);
+export async function getChapterFiles(rootDir = getContentRoot()) {
+  const files = await readdir(rootDir);
   return files
     .filter(f => /^\d{2}-.+\.md$/.test(f))
     .sort();
@@ -26,8 +26,8 @@ export function getChapterNav(currentFile, chapterFiles) {
   return `<div class="chapter-nav">${parts.join('')}</div>`;
 }
 
-export async function buildFileListToc() {
-  const files = await readdir(ROOT_DIR);
+export async function buildFileListToc(rootDir = getContentRoot()) {
+  const files = await readdir(rootDir);
   const mdFiles = files.filter(f => f.endsWith('.md') && f !== 'AGENTS.md' && f !== 'README.md');
   // Numbered chapters sorted by filename
   mdFiles.sort((a, b) => a.localeCompare(b));
