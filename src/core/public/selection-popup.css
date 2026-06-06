@@ -1,0 +1,56 @@
+/* Core selection popup — appears above selected text */
+.selection-popup {
+  display: none;
+  position: absolute;
+  z-index: 10001;
+  transform: translate(-50%, -100%);
+  margin-top: -6px;
+  background: #eaeef2;
+  border: 1px solid #afb8c1;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(31,35,40,0.18);
+  padding: 4px;
+  white-space: nowrap;
+}
+
+.selection-popup::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: #eaeef2;
+  border-right: 1px solid #afb8c1;
+  border-bottom: 1px solid #afb8c1;
+}
+
+.selection-popup.visible {
+  display: block;
+}
+
+.selection-popup button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: #24292f;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1.4;
+  font-family: inherit;
+}
+
+.selection-popup button:hover {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(31,35,40,0.08);
+}
+
+.selection-popup button + button {
+  margin-left: 2px;
+}

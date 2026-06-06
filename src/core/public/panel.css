@@ -1,0 +1,261 @@
+/* Core panel — unified floating container with tabs, draggable, resizable */
+.core-panel {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: min(320px, calc(100vw - 16px));
+  height: min(600px, calc(100vh - 16px));
+  min-width: 0;
+  min-height: min(280px, calc(100vh - 16px));
+  max-height: calc(100vh - 16px);
+  max-width: calc(100vw - 16px);
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(140,149,159,0.2);
+  display: none;
+  flex-direction: column;
+  z-index: 10000;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.core-panel.open {
+  display: flex;
+}
+
+/* Tab bar */
+.core-panel-tabs {
+  display: flex;
+  align-items: stretch;
+  background: #f6f8fa;
+  border-bottom: 1px solid #d0d7de;
+  flex-shrink: 0;
+  cursor: move;
+  user-select: none;
+  padding-right: 4px;
+}
+
+.core-panel-tab {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #656d76;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.core-panel-tab:hover {
+  color: #24292f;
+  background: rgba(208,215,222,0.24);
+}
+
+.core-panel-tab.active {
+  color: #24292f;
+  border-bottom-color: #fd8c73;
+  background: #ffffff;
+}
+
+.core-panel-tab .tab-icon {
+  font-size: 14px;
+}
+
+/* Spacer to push close button right */
+.core-panel-tab-spacer {
+  flex: 1;
+}
+
+.core-panel-reset,
+.core-panel-close {
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #656d76;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+  align-self: center;
+}
+
+.core-panel-reset {
+  margin-right: 0;
+}
+
+.core-panel-close {
+  margin-right: 2px;
+}
+
+.core-panel-reset:hover,
+.core-panel-close:hover {
+  background: rgba(208,215,222,0.32);
+  color: #24292f;
+}
+
+/* Tab panes */
+.core-panel-panes {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.core-panel-pane {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  flex-direction: column;
+}
+
+.core-panel-pane.active {
+  display: flex;
+}
+
+/* Resize handles — 8 directions */
+.core-panel-resize {
+  position: absolute;
+  z-index: 1;
+}
+
+.core-panel-resize-n  { top: -3px; left: 8px; right: 8px; height: 6px; cursor: n-resize; }
+.core-panel-resize-s  { bottom: -3px; left: 8px; right: 8px; height: 6px; cursor: s-resize; }
+.core-panel-resize-e  { right: -3px; top: 8px; bottom: 8px; width: 6px; cursor: e-resize; }
+.core-panel-resize-w  { left: -3px; top: 8px; bottom: 8px; width: 6px; cursor: w-resize; }
+.core-panel-resize-ne { top: -3px; right: -3px; width: 10px; height: 10px; cursor: ne-resize; }
+.core-panel-resize-nw { top: -3px; left: -3px; width: 10px; height: 10px; cursor: nw-resize; }
+.core-panel-resize-se { bottom: -3px; right: -3px; width: 10px; height: 10px; cursor: se-resize; }
+.core-panel-resize-sw { bottom: -3px; left: -3px; width: 10px; height: 10px; cursor: sw-resize; }
+
+/* Unified confirm overlay — sits inside panel pane, shared by plugins */
+.core-panel-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(246,248,250,0.92);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.core-panel-confirm-dialog {
+  background: #fff;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 1rem;
+  width: 260px;
+  max-width: 90%;
+}
+.core-panel-confirm-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1f2328;
+  margin-bottom: 0.5rem;
+}
+.core-panel-confirm-preview {
+  font-size: 0.75rem;
+  color: #656d76;
+  background: #f6f8fa;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.75rem;
+  max-height: 60px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  line-height: 1.4;
+  word-break: break-all;
+}
+.core-panel-confirm-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  color: #24292f;
+  margin-bottom: 0.75rem;
+  outline: none;
+}
+.core-panel-confirm-input:focus {
+  border-color: #0969da;
+  box-shadow: 0 0 0 2px rgba(9,105,218,0.15);
+}
+.core-panel-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.core-panel-confirm-actions button {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid #d0d7de;
+  background: #f6f8fa;
+  color: #24292f;
+}
+.core-panel-confirm-actions button:hover {
+  background: #eaeef2;
+}
+.core-panel-confirm-actions button.primary {
+  color: #fff;
+  border-color: #0969da;
+  background: #0969da;
+}
+.core-panel-confirm-actions button.primary:hover {
+  background: #0757b8;
+  border-color: #0757b8;
+}
+.core-panel-confirm-actions button.danger {
+  color: #cf222e;
+  border-color: #ffc1c1;
+  background: #fff0f0;
+}
+.core-panel-confirm-actions button.danger:hover {
+  background: #ffd4d4;
+  border-color: #cf222e;
+}
+
+/* Unified non-blocking panel notice */
+.core-panel-notice {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 11;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  color: #24292f;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  padding: 8px 10px;
+  pointer-events: none;
+}
+.core-panel-notice.error {
+  color: #cf222e;
+  border-color: #ffc1c1;
+  background: #fff0f0;
+}
+.core-panel-notice.warn {
+  color: #9a6700;
+  border-color: #f0d88a;
+  background: #fff8e5;
+}
+.core-panel-notice.success {
+  color: #1a7f37;
+  border-color: #aceebb;
+  background: #dafbe1;
+}

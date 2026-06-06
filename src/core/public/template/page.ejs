@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %> - <%- siteTitle %></title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
+  <link rel="stylesheet" href="/core/public/style.css">
+  <link rel="stylesheet" href="/core/public/selection-popup.css">
+  <link rel="stylesheet" href="/core/public/floating-actions.css">
+  <link rel="stylesheet" href="/core/public/panel.css">
+  <% if (pluginCssUrls && pluginCssUrls.length) { %>
+  <%   pluginCssUrls.forEach(function(u) { %>
+  <link rel="stylesheet" href="<%- u %>">
+  <%   }); %>
+  <% } %>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/"><%- siteTitle %></a>
+      </div>
+      <nav class="toc-nav">
+        <%- tocHtml %>
+      </nav>
+      <% if (showViewToggle) { %>
+      <div class="float-panel">
+        <div class="settings-dropdown">
+          <button id="btn-settings" class="settings-trigger" title="设置" aria-haspopup="menu" aria-expanded="false">
+            <span class="settings-trigger-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 0 1 6.34 21l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </span>
+            <span class="settings-trigger-title">设置</span>
+            <span class="settings-trigger-caret">⌃</span>
+          </button>
+          <div class="settings-menu" id="settings-menu" role="menu">
+            <div class="settings-menu-section">
+              <a href="/<%= currentFile %>?raw" id="btn-source" class="settings-menu-item" role="menuitem">
+                <span class="settings-menu-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                </span>
+                <span class="settings-menu-text">源码视图</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <% } %>
+    </aside>
+    <div class="main">
+      <div class="content-wrap">
+        <div id="view-rendered" class="markdown-content"><%- content %></div>
+      </div>
+    </div>
+  </div>
+  <div class="lightbox" id="lightbox">
+    <span class="lightbox-close" id="lightbox-close">&times;</span>
+    <div class="lightbox-content" id="lightbox-content"></div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: false });
+
+    function renderMermaid() {
+      mermaid.run({ querySelector: '.mermaid' });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+  <script src="/core/public/core-state.js"></script>
+  <script src="/core/public/dom-utils.js"></script>
+  <script src="/core/public/sidebar-toc.js"></script>
+  <script src="/core/public/mermaid-lightbox.js"></script>
+  <script src="/core/public/settings-menu.js"></script>
+  <script src="/core/public/selection-popup.js"></script>
+  <script src="/core/public/floating-actions.js"></script>
+  <script src="/core/public/panel.js"></script>
+  <script src="/core/public/article-source.js"></script>
+  <script src="/core/public/core-ready.js"></script>
+  <% if (dataScripts) { %>
+  <script><%- dataScripts %></script>
+  <% } %>
+  <% if (pluginJsUrls && pluginJsUrls.length) { %>
+  <%   pluginJsUrls.forEach(function(u) { %>
+  <script src="<%- u %>"></script>
+  <%   }); %>
+  <% } %>
+</body>
+</html>

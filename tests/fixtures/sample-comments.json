@@ -1,0 +1,18 @@
+{
+  "file": "sample-chapter.md",
+  "comments": [
+    {
+      "id": "pre001",
+      "author": "PreExisting",
+      "sectionHeading": "Section 1",
+      "sectionLevel": 2,
+      "selectedText": "test paragraph",
+      "textHash": "abc12345",
+      "contextBefore": "This is a ",
+      "contextAfter": " with some **bold**",
+      "comment": "Pre-existing comment for integration testing",
+      "createdAt": "2026-06-05T00:00:00.000Z",
+      "resolved": false
+    }
+  ]
+}
