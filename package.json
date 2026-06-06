@@ -1,0 +1,31 @@
+{
+  "name": "doc-pi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "doc-pi": "./bin/doc-pi.js"
+  },
+  "scripts": {
+    "start": "bun run bin/doc-pi.js",
+    "dev": "bun --watch run bin/doc-pi.js",
+    "test": "bun test src/core/server/__tests__/ src/plugins/comments/server/__tests__/ src/plugins/ai-qa/server/__tests__/",
+    "test:integration": "bun test tests/integration/",
+    "test:e2e": "bun test tests/e2e/",
+    "test:self-check": "bun test tests/self-check/",
+    "test:all": "bun run test && bun run test:integration && bun run test:e2e && bun run test:self-check"
+  },
+  "dependencies": {
+    "@oh-my-pi/pi-coding-agent": "^15.9.1",
+    "boxen": "^8.0.1",
+    "chalk": "^5.6.2",
+    "ejs": "^6.0.1",
+    "gradient-string": "^3.0.0",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.9",
+    "marked": "^18.0.4"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  }
+}
