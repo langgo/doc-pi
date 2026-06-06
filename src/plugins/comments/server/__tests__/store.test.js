@@ -1,19 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { loadComments, saveComments } from '../store.js';
 import path from 'path';
-import { ROOT_DIR } from '../../../../core/server/config.js';
-import { existsSync, unlinkSync, rmdirSync } from 'fs';
+import { existsSync, rmSync } from 'fs';
+import { mkdtemp } from 'fs/promises';
+import { tmpdir } from 'os';
+import { setRuntimeConfig } from '../../../../core/server/runtime-state.js';
 
 const TEST_FILE = 'test-chapter.md';
-const COMMENTS_DIR = path.join(ROOT_DIR, 'data', 'comments');
-const TEST_JSON = path.join(COMMENTS_DIR, 'test-chapter.json');
+let tmpRoot;
+let commentsDir;
 
-function cleanup() {
-  if (existsSync(TEST_JSON)) unlinkSync(TEST_JSON);
+function testJson() {
+  return path.join(commentsDir, 'test-chapter.json');
 }
 
-beforeEach(cleanup);
-afterEach(cleanup);
+beforeEach(async () => {
+  tmpRoot = await mkdtemp(path.join(tmpdir(), 'doc-pi-store-'));
+  commentsDir = path.join(tmpRoot, 'comments');
+  setRuntimeConfig({ rootDir: tmpRoot, comments: { dataDir: commentsDir } });
+});
+
+afterEach(() => {
+  if (tmpRoot && existsSync(tmpRoot)) rmSync(tmpRoot, { recursive: true, force: true });
+});
 
 describe('store', () => {
   describe('loadComments', () => {
@@ -41,7 +50,7 @@ describe('store', () => {
         comments: [{ id: 'xyz789', comment: 'saved', selectedText: 'world' }]
       };
       await saveComments(TEST_FILE, testData);
-      expect(existsSync(TEST_JSON)).toBe(true);
+      expect(existsSync(testJson())).toBe(true);
 
       const loaded = await loadComments(TEST_FILE);
       expect(loaded.comments).toHaveLength(1);

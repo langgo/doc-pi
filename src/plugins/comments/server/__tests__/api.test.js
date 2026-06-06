@@ -2,20 +2,25 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { apiRoutes } from '../api.js';
 import { loadComments, saveComments } from '../store.js';
 import path from 'path';
-import { ROOT_DIR } from '../../../../core/server/config.js';
-import { existsSync, unlinkSync } from 'fs';
+import { existsSync, rmSync } from 'fs';
+import { mkdtemp } from 'fs/promises';
+import { tmpdir } from 'os';
 import { EventEmitter } from 'events';
+import { setRuntimeConfig } from '../../../../core/server/runtime-state.js';
 
 const TEST_FILE = 'api-test.md';
-const COMMENTS_DIR = path.join(ROOT_DIR, 'data', 'comments');
-const TEST_JSON = path.join(COMMENTS_DIR, 'api-test.json');
+let tmpRoot;
+let commentsDir;
 
-function cleanup() {
-  if (existsSync(TEST_JSON)) unlinkSync(TEST_JSON);
-}
+beforeEach(async () => {
+  tmpRoot = await mkdtemp(path.join(tmpdir(), 'doc-pi-comments-api-unit-'));
+  commentsDir = path.join(tmpRoot, 'comments');
+  setRuntimeConfig({ rootDir: tmpRoot, comments: { dataDir: commentsDir } });
+});
 
-beforeEach(cleanup);
-afterEach(cleanup);
+afterEach(() => {
+  if (tmpRoot && existsSync(tmpRoot)) rmSync(tmpRoot, { recursive: true, force: true });
+});
 
 // Helper: create a mock request
 function mockReq(method, url, body) {

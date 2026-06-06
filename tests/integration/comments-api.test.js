@@ -1,25 +1,50 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import path from 'path';
 import { ROOT_DIR } from '../../src/core/server/config.js';
-import { existsSync, mkdirSync, unlinkSync } from 'fs';
-import { writeFile } from 'fs/promises';
+import { existsSync, mkdirSync, rmSync, unlinkSync } from 'fs';
+import { mkdtemp, readFile, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
 
 let serverProcess;
+let tmpRoot;
+let commentsDir;
 const BASE_URL = 'http://localhost:3098';
 const TEST_FILE = 'sample-chapter.md';
-const COMMENTS_DIR = path.join(ROOT_DIR, 'data', 'comments');
-const TEST_JSON = path.join(COMMENTS_DIR, 'test-chapter.json');
+const FIXTURE_ROOT = path.join(ROOT_DIR, 'tests', 'fixtures');
+const PACKAGE_DEFAULT_COMMENTS_DIR = path.join(ROOT_DIR, 'data', 'comments');
+const CONTENT_DEFAULT_COMMENTS_DIR = path.join(FIXTURE_ROOT, 'data', 'comments');
+const TEST_JSON = () => path.join(commentsDir, 'sample-chapter.json');
+const PACKAGE_DEFAULT_TEST_JSON = path.join(PACKAGE_DEFAULT_COMMENTS_DIR, 'sample-chapter.json');
+const CONTENT_DEFAULT_TEST_JSON = path.join(CONTENT_DEFAULT_COMMENTS_DIR, 'sample-chapter.json');
+let oldPackageDefaultJson;
+let oldContentDefaultJson;
 
 function api(path, options) {
   return fetch(`${BASE_URL}${path}`, options);
 }
 
 beforeAll(async () => {
-  if (!existsSync(COMMENTS_DIR)) {
-    mkdirSync(COMMENTS_DIR, { recursive: true });
+  tmpRoot = await mkdtemp(path.join(tmpdir(), 'doc-pi-comments-api-'));
+  commentsDir = path.join(tmpRoot, 'comments');
+  mkdirSync(commentsDir, { recursive: true });
+  if (existsSync(PACKAGE_DEFAULT_TEST_JSON)) {
+    oldPackageDefaultJson = await readFile(PACKAGE_DEFAULT_TEST_JSON, 'utf-8');
+    unlinkSync(PACKAGE_DEFAULT_TEST_JSON);
+  }
+  if (existsSync(CONTENT_DEFAULT_TEST_JSON)) {
+    oldContentDefaultJson = await readFile(CONTENT_DEFAULT_TEST_JSON, 'utf-8');
+    unlinkSync(CONTENT_DEFAULT_TEST_JSON);
   }
 
-  serverProcess = Bun.spawn(['bun', 'run', 'src/server.js'], {
+  serverProcess = Bun.spawn([
+    'bun',
+    'run',
+    'src/server.js',
+    '--root',
+    'tests/fixtures',
+    '--comments-data-dir',
+    commentsDir,
+  ], {
     cwd: ROOT_DIR,
     env: { ...process.env, PORT: '3098' },
     stdout: 'pipe',
@@ -36,9 +61,17 @@ beforeAll(async () => {
   throw new Error('Server failed to start on port 3098');
 }, 30000);
 
-afterAll(() => {
+afterAll(async () => {
   if (serverProcess) serverProcess.kill();
-  if (existsSync(TEST_JSON)) unlinkSync(TEST_JSON);
+  if (oldPackageDefaultJson !== undefined) {
+    mkdirSync(PACKAGE_DEFAULT_COMMENTS_DIR, { recursive: true });
+    await Bun.write(PACKAGE_DEFAULT_TEST_JSON, oldPackageDefaultJson);
+  }
+  if (oldContentDefaultJson !== undefined) {
+    mkdirSync(CONTENT_DEFAULT_COMMENTS_DIR, { recursive: true });
+    await Bun.write(CONTENT_DEFAULT_TEST_JSON, oldContentDefaultJson);
+  }
+  if (tmpRoot && existsSync(tmpRoot)) rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 describe('Comments API integration', () => {
@@ -51,7 +84,7 @@ describe('Comments API integration', () => {
     expect(data.comments).toEqual([]);
   });
 
-  it('POST /api/comments/sample-chapter.md should create a comment', async () => {
+  it('POST /api/comments/sample-chapter.md should create a comment in the configured comments directory', async () => {
     const res = await api('/api/comments/sample-chapter.md', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -70,6 +103,16 @@ describe('Comments API integration', () => {
     expect(data.selectedText).toBe('integration test text');
     expect(data.comment).toBe('This is an integration test comment');
     createdId = data.id;
+
+    const configuredJsonPath = TEST_JSON();
+    expect(existsSync(configuredJsonPath)).toBe(true);
+    const stored = JSON.parse(await readFile(configuredJsonPath, 'utf-8'));
+    expect(stored.file).toBe(TEST_FILE);
+    expect(stored.comments).toHaveLength(1);
+    expect(stored.comments[0].id).toBe(createdId);
+    expect(stored.comments[0].comment).toBe('This is an integration test comment');
+    expect(existsSync(PACKAGE_DEFAULT_TEST_JSON)).toBe(false);
+    expect(existsSync(CONTENT_DEFAULT_TEST_JSON)).toBe(false);
   });
 
   it('GET should return the created comment', async () => {
@@ -148,7 +191,8 @@ describe('Comments summary API', () => {
   let createdId;
 
   afterAll(() => {
-    if (existsSync(TEST_JSON)) unlinkSync(TEST_JSON);
+    const jsonPath = TEST_JSON();
+    if (existsSync(jsonPath)) unlinkSync(jsonPath);
   });
 
   it('GET /api/comments/summary should return valid chapters array', async () => {
@@ -208,7 +252,7 @@ describe('Comments summary API', () => {
 
   it('summary should ignore malformed JSON files', async () => {
     // Write a malformed JSON file directly
-    const badPath = path.join(COMMENTS_DIR, 'bad-chapter.json');
+    const badPath = path.join(commentsDir, 'bad-chapter.json');
     await writeFile(badPath, 'not valid json', 'utf-8');
 
     const res = await api('/api/comments/summary');
