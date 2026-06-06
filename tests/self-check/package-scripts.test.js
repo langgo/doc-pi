@@ -10,6 +10,12 @@ async function loadPackageJson() {
 }
 
 describe('package verification scripts', () => {
+  it('package should expose the doc-pi CLI binary', async () => {
+    const pkg = await loadPackageJson();
+    expect(pkg.bin).toEqual({ 'doc-pi': './bin/doc-pi.js' });
+    expect(pkg.type).toBe('module');
+  });
+
   it('test script should include all server unit test directories', async () => {
     const pkg = await loadPackageJson();
     expect(pkg.scripts.test).toContain('src/core/server/__tests__/');
