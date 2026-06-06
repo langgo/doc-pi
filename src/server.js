@@ -155,7 +155,15 @@ export async function startServer(runtimeConfig) {
     registerPlugin(commentsPlugin);
   }
   if (config.aiQa.enabled !== false) {
-    registerPlugin(createAiQaPlugin({ agentDir: config.aiQa.agentDir, persistThinking: config.aiQa.persistThinking }));
+    if (existsSync(config.aiQa.agentDir)) {
+      registerPlugin(createAiQaPlugin({
+        agentDir: config.aiQa.agentDir,
+        historyDir: config.aiQa.historyDir,
+        persistThinking: config.aiQa.persistThinking,
+      }));
+    } else {
+      console.warn(`[doc-pi] AI QA disabled: agent directory does not exist: ${config.aiQa.agentDir}`);
+    }
   }
 
   const server = createDocPiServer(config);
