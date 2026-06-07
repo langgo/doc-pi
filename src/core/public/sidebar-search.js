@@ -313,6 +313,7 @@
     var result = results[Math.max(0, Math.min(index, results.length - 1))];
     result.focus();
     setSelectedResult(result);
+    result.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     return true;
   }
 

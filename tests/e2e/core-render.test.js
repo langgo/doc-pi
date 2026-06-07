@@ -497,6 +497,52 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('keeps keyboard-selected sidebar search results visible', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        window.__docPiScrollIntoViewCalls = [];
+        Element.prototype.scrollIntoView = function (options) {
+          window.__docPiScrollIntoViewCalls.push({
+            className: this.className,
+            block: options && options.block,
+            inline: options && options.inline,
+          });
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.route('**/api/search?q=*', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          query: 'many',
+          results: Array.from({ length: 12 }, (_, index) => ({
+            file: 'rich-markdown.md',
+            line: index + 1,
+            title: 'Result ' + (index + 1),
+            snippet: 'Search result ' + (index + 1),
+            tags: [],
+          })),
+        }),
+      }));
+      await page.fill('.doc-search-input', 'many');
+      await page.waitForSelector('.doc-search-result');
+      await page.$eval('.doc-search-results', el => {
+        el.style.maxHeight = '84px';
+        el.style.overflowY = 'auto';
+      });
+      await page.press('.doc-search-input', 'ArrowDown');
+      for (let index = 0; index < 8; index += 1) {
+        await page.keyboard.press('ArrowDown');
+      }
+      await page.waitForFunction(() => document.querySelectorAll('.doc-search-result')[8]?.classList.contains('search-selected'));
+      const scrollCalls = await page.evaluate(() => window.__docPiScrollIntoViewCalls);
+      expect(scrollCalls.some(call => String(call.className).includes('doc-search-result') && call.block === 'nearest')).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('supports keyboard navigation in sidebar search results', async () => {
     const page = await browser.newPage();
     try {
