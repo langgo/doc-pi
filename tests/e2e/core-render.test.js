@@ -47,6 +47,24 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('syncs sidebar search when browser history restores URL query', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => {
+        window.history.pushState(window.history.state, '', window.location.pathname + '?q=footnote');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('footnote');
+      expect(new URL(page.url()).searchParams.get('q')).toBe('footnote');
+      expect(await page.$eval('.doc-search-count', el => el.textContent)).toBe('2');
+      expect(await page.$eval('.doc-search-status', el => el.textContent)).toBe('2 个结果');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('does not run a pending debounced search after clearing input', async () => {
     const page = await browser.newPage();
     try {
