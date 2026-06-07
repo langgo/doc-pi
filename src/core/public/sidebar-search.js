@@ -8,6 +8,14 @@
   var activeRequest = 0;
   var timer = null;
 
+  function syncUrl(query) {
+    var url = new URL(window.location.href);
+    var trimmed = String(query || '').trim();
+    if (trimmed) url.searchParams.set('q', trimmed);
+    else url.searchParams.delete('q');
+    window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+  }
+
   function clearResults(message) {
     resultsEl.innerHTML = '';
     statusEl.textContent = message || '';
@@ -94,6 +102,7 @@
     input.value = '';
     renderFilters('');
     clearResults('');
+    syncUrl('');
     activeRequest += 1;
   }
 
@@ -208,9 +217,16 @@
 
   input.addEventListener('input', function () {
     var query = input.value;
+    syncUrl(query);
     clearTimeout(timer);
     timer = setTimeout(function () {
       runSearch(query);
     }, 120);
   });
+
+  var initialQuery = new URL(window.location.href).searchParams.get('q') || '';
+  if (initialQuery) {
+    input.value = initialQuery;
+    runSearch(initialQuery);
+  }
 })();
