@@ -50,6 +50,7 @@
     var target = document.getElementById(window.location.hash.slice(1));
     if (!target || !target.classList.contains('doc-search-line-target')) return;
     target.classList.add('line-target-active');
+    target.focus({ preventScroll: true });
   }
 
   function runHighlight() {

@@ -611,6 +611,9 @@ describe('Core render E2E', () => {
       expect(page.url()).toContain('#L18');
       await page.waitForSelector('#L18.doc-search-line-target', { state: 'attached' });
       await page.waitForSelector('.doc-search-line-target.line-target-active', { state: 'attached' });
+      expect(await page.$eval('#L18', el => el.getAttribute('aria-label'))).toBe('搜索结果第 18 行');
+      expect(await page.$eval('#L18', el => el.getAttribute('tabindex'))).toBe('-1');
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(true);
       await page.waitForSelector('.doc-search-hit', { state: 'attached' });
       const highlightedText = await page.$eval('.doc-search-hit', el => el.textContent);
       expect(highlightedText.toLowerCase()).toBe('blockquote');

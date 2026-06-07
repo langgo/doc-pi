@@ -248,7 +248,7 @@ export async function processMarkdown(filePath) {
     if (inSourceFence || !rawText || /^#{1,6}\s+/.test(rawText) || /^[-*+]\s+/.test(rawText)) continue;
     const text = rawText.replace(/^>\s+/, '');
     const renderedText = escapeHtml(text).replace(/\*\*/g, '').replace(/`/g, '');
-    html = html.replace(renderedText, '<span id="L' + sourceLine + '" class="doc-search-line-target"></span>' + renderedText);
+    html = html.replace(renderedText, '<span id="L' + sourceLine + '" class="doc-search-line-target" aria-label="搜索结果第 ' + sourceLine + ' 行" tabindex="-1"></span>' + renderedText);
   }
 
   // Restore mermaid blocks as plain divs for mermaid.js

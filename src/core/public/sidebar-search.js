@@ -319,7 +319,10 @@
           setTimeout(function () {
             if (/^#L\d+$/.test(window.location.hash || '')) {
               var target = document.getElementById(window.location.hash.slice(1));
-              if (target && target.classList.contains('doc-search-line-target')) target.classList.add('line-target-active');
+              if (target && target.classList.contains('doc-search-line-target')) {
+                target.classList.add('line-target-active');
+                target.focus({ preventScroll: true });
+              }
             }
             var params = new URLSearchParams(window.location.search || '');
             var query = (params.get('q') || '').trim();
