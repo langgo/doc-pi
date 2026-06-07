@@ -20,7 +20,7 @@ import createAiQaPlugin from './plugins/ai-qa/index.js';
 async function handleDirectory(rootDir) {
   const readmePath = path.join(rootDir, 'README.md');
   const html = await processMarkdown(readmePath);
-  const tocHtml = await buildFileListToc(rootDir);
+  const tocHtml = await buildFileListToc(rootDir, 'README.md');
   const pluginInjections = await collectPluginInjections('README.md');
   return renderHtml({ title: 'README.md', content: html, tocHtml, currentFile: 'README.md', pluginInjections });
 }
@@ -32,7 +32,7 @@ async function handleMarkdown(filePath, chapterFiles, pluginInjections) {
   let mdContent = await readFile(filePath, 'utf-8');
   mdContent = stripBOM(mdContent);
   const headings = extractToc(mdContent);
-  const tocHtml = buildTocHtml(headings, currentFile);
+  const tocHtml = await buildFileListToc(path.dirname(filePath), currentFile) + buildTocHtml(headings, currentFile);
 
   const title = currentFile;
   const chapterNav = getChapterNav(currentFile, chapterFiles);

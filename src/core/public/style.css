@@ -129,6 +129,11 @@ body {
 
 .toc-nav a:hover { background: #ddf4ff; color: #0969da; }
 .toc-nav a.active { background: #ddf4ff; color: #0969da; font-weight: 600; }
+.toc-nav a.toc-current {
+  background: #e7f1ff;
+  color: #0969da;
+  font-weight: 700;
+}
 
 .toc-nav .toc-h1 { font-weight: 600; color: #1f2328; font-size: 0.8125rem; padding-left: 0.5rem; }
 .toc-nav .toc-h2 { padding-left: 1.25rem; }

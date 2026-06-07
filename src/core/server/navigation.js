@@ -26,7 +26,7 @@ export function getChapterNav(currentFile, chapterFiles) {
   return `<div class="chapter-nav">${parts.join('')}</div>`;
 }
 
-export async function buildFileListToc(rootDir = getContentRoot()) {
+export async function buildFileListToc(rootDir = getContentRoot(), currentFile = '') {
   const files = await readdir(rootDir);
   const mdFiles = files.filter(f => f.endsWith('.md') && f !== 'AGENTS.md' && f !== 'README.md');
   // Numbered chapters sorted by filename
@@ -34,7 +34,8 @@ export async function buildFileListToc(rootDir = getContentRoot()) {
   let html = '<ul>';
   for (const f of mdFiles) {
     const name = f.replace(/\.md$/, '');
-    html += `<li><a href="/${f}" class="toc-h1">${escapeHtml(name)}</a></li>`;
+    const activeClass = f === currentFile ? ' toc-current chapter-active' : '';
+    html += `<li><a href="/${f}" class="toc-h1${activeClass}">${escapeHtml(name)}</a></li>`;
   }
   html += '</ul>';
   return html;

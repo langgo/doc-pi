@@ -49,6 +49,17 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('marks the current sidebar chapter as active', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      const activeChapterHref = await page.$eval('.toc-nav a.chapter-active', el => el.getAttribute('href'));
+      expect(activeChapterHref).toBe('/sample-chapter.md');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('loads chapter page with sidebar and markdown content', async () => {
     const page = await browser.newPage();
     try {
