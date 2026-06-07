@@ -40,6 +40,10 @@ describe('Core render E2E', () => {
       await page.click('.doc-search-result');
       await page.waitForURL(/sample-chapter\.md/);
       expect(page.url()).toContain('sample-chapter.md');
+      expect(page.url()).toContain('q=blockquote');
+      await page.waitForSelector('.doc-search-hit');
+      const highlightedText = await page.$eval('.doc-search-hit', el => el.textContent);
+      expect(highlightedText.toLowerCase()).toBe('blockquote');
     } finally {
       await page.close();
     }

@@ -32,7 +32,7 @@
       var result = results[i];
       var link = document.createElement('a');
       link.className = 'doc-search-result';
-      link.href = '/' + encodeURIComponent(result.file);
+      link.href = '/' + encodeURIComponent(result.file) + '?q=' + encodeURIComponent(input.value.trim());
       link.innerHTML = '<span class="doc-search-title">' + escapeHtml(result.title) + '</span>' +
         '<span class="doc-search-meta">' + escapeHtml(result.file) + ':' + result.line + '</span>' +
         '<span class="doc-search-snippet">' + escapeHtml(result.snippet) + '</span>';
