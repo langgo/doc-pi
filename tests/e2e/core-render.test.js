@@ -28,6 +28,22 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows helpful empty state for sidebar searches without results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs not-present-anywhere');
+      await page.waitForSelector('.doc-search-empty');
+      expect(await page.$eval('.doc-search-empty-title', el => el.textContent)).toBe('无匹配结果');
+      expect(await page.$eval('.doc-search-empty-hint', el => el.textContent)).toContain('减少关键词');
+      expect(await page.$eval('.doc-search-empty-filter-hint', el => el.textContent)).toContain('点击上方标签过滤条件');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => document.querySelector('.doc-search-empty') === null);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows and clears sidebar search loading state', async () => {
     const page = await browser.newPage();
     try {
