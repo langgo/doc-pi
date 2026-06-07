@@ -19,6 +19,7 @@ const DEFAULTS = Object.freeze({
 const USAGE = `Usage: doc-pi [options]
 
 Options:
+  init                       Create doc-pi config and data directories
   --root <dir>               Documentation root directory (default: .)
   --port <port>              Server port (default: 3000)
   --config <file>            Runtime config file (.js or .json)
@@ -27,6 +28,7 @@ Options:
   --ai-history-dir <dir>     AI QA history directory, resolved from root
   --no-comments              Disable comments plugin
   --no-ai-qa                 Disable AI QA plugin
+  --force                    Overwrite files when used with init
   --help                     Show this help
 `;
 
@@ -43,6 +45,9 @@ function parseArgv(argv = []) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     switch (arg) {
+      case 'init':
+        flags.command = 'init';
+        break;
       case '--root':
         flags.root = readOption(argv, i, arg);
         i += 1;
@@ -72,6 +77,9 @@ function parseArgv(argv = []) {
         break;
       case '--no-ai-qa':
         flags.aiEnabled = false;
+        break;
+      case '--force':
+        flags.force = true;
         break;
       case '--help':
         flags.help = true;
@@ -148,6 +156,9 @@ function applyCliFlags(config, flags) {
 
 export async function resolveRuntimeConfig({ argv = [], cwd = process.cwd(), configObject = null } = {}) {
   const flags = parseArgv(argv);
+  if (flags.command === 'init') {
+    return { command: 'init', root: resolveFrom(cwd, flags.root || '.'), force: flags.force === true };
+  }
   if (flags.help) {
     return { help: true, usage: USAGE };
   }
@@ -201,4 +212,4 @@ export async function loadRuntimeConfig(argv = process.argv.slice(2)) {
   return config;
 }
 
-export { USAGE as RUNTIME_CONFIG_USAGE };
+export { parseArgv, USAGE as RUNTIME_CONFIG_USAGE };
