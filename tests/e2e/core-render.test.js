@@ -28,6 +28,37 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('retries failed sidebar searches', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let attempts = 0;
+      await page.route('**/api/search?q=*', async route => {
+        attempts += 1;
+        if (attempts === 1) {
+          await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'forced failure' }) });
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-retry');
+      await page.click('.doc-search-retry');
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$$('.doc-search-retry')).toHaveLength(0);
+      expect(await page.$eval('.doc-search-input', el => el.getAttribute('aria-invalid'))).toBe('false');
+      await page.route('**/api/search?q=*', async route => {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'forced failure again' }) });
+      });
+      await page.fill('.doc-search-input', 'retry clear');
+      await page.waitForSelector('.doc-search-retry');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => document.querySelector('.doc-search-retry') === null);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows and clears sidebar search error state', async () => {
     const page = await browser.newPage();
     try {
