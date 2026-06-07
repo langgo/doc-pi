@@ -338,6 +338,10 @@ body {
 }
 
 .heading-anchor:hover { color: #0969da; }
+.heading-anchor.copied {
+  color: #1a7f37;
+  opacity: 1;
+}
 
 .markdown-content p { margin-bottom: 16px; }
 
