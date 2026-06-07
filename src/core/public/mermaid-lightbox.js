@@ -3,9 +3,9 @@ const lightbox = document.getElementById('lightbox');
 const lightboxContent = document.getElementById('lightbox-content');
 const lightboxClose = document.getElementById('lightbox-close');
 
-function openLightbox(svg) {
+function openLightbox(element) {
   lightboxContent.innerHTML = '';
-  const clone = svg.cloneNode(true);
+  const clone = element.cloneNode(true);
   // Remove inline width/height so CSS can control sizing
   clone.removeAttribute('width');
   clone.removeAttribute('height');
@@ -29,6 +29,14 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeLightbox();
 });
 
+function attachImageClicks() {
+  document.querySelectorAll('.markdown-content img').forEach(image => {
+    if (image.dataset.lightboxBound) return;
+    image.dataset.lightboxBound = '1';
+    image.addEventListener('click', () => openLightbox(image));
+  });
+}
+
 // Attach click handlers after mermaid renders (deferred via MutationObserver)
 function attachMermaidClicks() {
   document.querySelectorAll('.mermaid-container').forEach(container => {
@@ -44,12 +52,17 @@ function attachMermaidClicks() {
 // Mermaid renders async; observe DOM for new SVGs
 const observer = new MutationObserver(() => {
   attachMermaidClicks();
+  attachImageClicks();
 });
 observer.observe(document.body, { childList: true, subtree: true });
 
 // Also try immediately (in case mermaid already rendered)
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', attachMermaidClicks);
+  document.addEventListener('DOMContentLoaded', () => {
+    attachMermaidClicks();
+    attachImageClicks();
+  });
 } else {
   attachMermaidClicks();
+  attachImageClicks();
 }

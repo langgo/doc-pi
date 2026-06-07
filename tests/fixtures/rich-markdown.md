@@ -20,6 +20,10 @@ const answer = 42;
 
 [Example](https://example.com)
 
+## Image
+
+![Tiny inline SVG](data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%3E%3Crect%20width%3D%2212%22%20height%3D%2212%22%20fill%3D%22red%22/%3E%3C/svg%3E)
+
 ## Mermaid
 
 ```mermaid

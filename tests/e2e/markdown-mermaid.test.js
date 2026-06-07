@@ -32,6 +32,23 @@ describe('Markdown and Mermaid E2E', () => {
     }
   });
 
+  it('opens markdown images in the lightbox', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content img[alt="Tiny inline SVG"]');
+      await page.click('.markdown-content img[alt="Tiny inline SVG"]');
+      await page.waitForSelector('.lightbox.active', { timeout: 5000 });
+      const image = await page.$eval('#lightbox-content img', el => ({ alt: el.getAttribute('alt'), src: el.getAttribute('src') }));
+      expect(image.alt).toBe('Tiny inline SVG');
+      expect(image.src).toContain('data:image/svg+xml');
+      await page.click('#lightbox-close');
+      await page.waitForFunction(() => !document.querySelector('.lightbox')?.classList.contains('active'));
+    } finally {
+      await page.close();
+    }
+  });
+
   it('renders mermaid diagram and opens lightbox', async () => {
     const page = await browser.newPage();
     try {
