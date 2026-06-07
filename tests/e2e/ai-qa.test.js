@@ -323,12 +323,15 @@ describe('AI QA E2E', () => {
           if (url.includes('/api/ai-qa/chat')) {
             window.__aiQaChatCount += 1;
             const encoder = new TextEncoder();
-            const payload = window.__aiQaChatCount === 1
-              ? 'event: thinking_delta\ndata: {"delta":"plan"}\n\nevent: text_delta\ndata: {"delta":"**ok**"}\n\nevent: done\ndata: {}\n\n'
-              : 'event: error\ndata: {"error":"boom"}\n\n';
             const stream = new ReadableStream({
-              start(controller) {
-                controller.enqueue(encoder.encode(payload));
+              async start(controller) {
+                if (window.__aiQaChatCount === 1) {
+                  controller.enqueue(encoder.encode('event: thinking_delta\ndata: {"delta":"plan"}\n\nevent: text_delta\ndata: {"delta":"**ok**"}\n\n'));
+                  await new Promise(resolve => setTimeout(resolve, 50));
+                  controller.enqueue(encoder.encode('event: done\ndata: {}\n\n'));
+                } else {
+                  controller.enqueue(encoder.encode('event: error\ndata: {"error":"boom"}\n\n'));
+                }
                 controller.close();
               },
             });
@@ -344,11 +347,14 @@ describe('AI QA E2E', () => {
       await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'first');
       await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
       await page.waitForFunction(() => document.querySelector('.ai-qa-thinking pre')?.textContent.trim() === 'plan');
+      await page.waitForFunction(() => document.querySelector('.ai-qa-message.assistant.streaming strong')?.textContent === 'ok');
+      const streamingAnswerHtml = await page.$eval('.ai-qa-message.assistant.streaming', el => el.innerHTML);
       await page.waitForFunction(() => document.querySelector('.ai-qa-message.assistant:not(.streaming)')?.innerHTML.includes('ok'));
       const thinkingText = await page.$eval('.ai-qa-thinking pre', el => el.textContent.trim());
-      const answerHtml = await page.$eval('.ai-qa-message.assistant:not(.streaming)', el => el.innerHTML);
+      const finalAnswerHtml = await page.$eval('.ai-qa-message.assistant:not(.streaming)', el => el.innerHTML);
       expect(thinkingText).toBe('plan');
-      expect(answerHtml).toContain('ok');
+      expect(streamingAnswerHtml).toContain('<strong>ok</strong>');
+      expect(finalAnswerHtml).toContain('ok');
 
       await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'second');
       await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
