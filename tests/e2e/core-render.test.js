@@ -712,12 +712,13 @@ describe('Core render E2E', () => {
   it('preserves ordinary heading hashes when clearing sidebar search', async () => {
     const page = await browser.newPage();
     try {
-      await gotoFixture(page, server.baseUrl, '/sample-chapter.md#sample-chapter-for-testing');
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.evaluate(() => history.replaceState(history.state, '', location.pathname + '#sample-chapter-for-testing'));
       expect(new URL(page.url()).hash).toBe('#sample-chapter-for-testing');
       await page.fill('.doc-search-input', 'blockquote');
       await page.waitForSelector('.doc-search-result');
       await page.fill('.doc-search-input', '');
-      await page.waitForTimeout(150);
+      await page.waitForFunction(() => !new URL(location.href).searchParams.has('q') && document.querySelectorAll('.doc-search-result').length === 0);
       const clearedUrl = new URL(page.url());
       expect(clearedUrl.searchParams.get('q')).toBe(null);
       expect(clearedUrl.hash).toBe('#sample-chapter-for-testing');
@@ -1003,6 +1004,8 @@ describe('Core render E2E', () => {
       expect(nav.next).toBe('/sample-chapter.md');
       expect(nav.text).toContain('上一章');
       expect(nav.text).toContain('下一章');
+      expect(nav.text).toContain('快捷键 [');
+      expect(nav.text).toContain('快捷键 ]');
     } finally {
       await page.close();
     }

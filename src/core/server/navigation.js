@@ -23,11 +23,13 @@ export function getChapterNav(currentFile, chapterFiles, options = {}) {
   const withLabels = options.withLabels === true;
   if (prev) {
     const prevName = escapeHtml(prev.replace(/\.md$/, ''));
-    parts.push(`<a href="/${prev}" class="nav-prev">← ${withLabels ? '<span>上一章</span><strong>' + prevName + '</strong>' : prevName}</a>`);
+    const hint = withLabels ? '<em>快捷键 [</em>' : '';
+    parts.push(`<a href="/${prev}" class="nav-prev">← ${withLabels ? '<span>上一章</span><strong>' + prevName + '</strong>' + hint : prevName}</a>`);
   }
   if (next) {
     const nextName = escapeHtml(next.replace(/\.md$/, ''));
-    parts.push(`<a href="/${next}" class="nav-next">${withLabels ? '<span>下一章</span><strong>' + nextName + '</strong>' : nextName} →</a>`);
+    const hint = withLabels ? '<em>快捷键 ]</em>' : '';
+    parts.push(`<a href="/${next}" class="nav-next">${withLabels ? '<span>下一章</span><strong>' + nextName + '</strong>' + hint : nextName} →</a>`);
   }
   if (!parts.length) return '';
   const className = options.position === 'bottom' ? 'chapter-nav chapter-nav-bottom' : 'chapter-nav';
