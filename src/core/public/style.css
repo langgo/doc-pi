@@ -237,6 +237,24 @@ body {
   border-color: #0969da;
   background: #ddf4ff;
 }
+.doc-search-empty {
+  border: 1px dashed #d0d7de;
+  border-radius: 8px;
+  background: #f6f8fa;
+  color: #57606a;
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  padding: 0.625rem;
+}
+.doc-search-empty-title {
+  color: #1f2328;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.doc-search-empty-hint,
+.doc-search-empty-filter-hint {
+  margin-top: 0.25rem;
+}
 .doc-search-title,
 .doc-search-meta,
 .doc-search-snippet {

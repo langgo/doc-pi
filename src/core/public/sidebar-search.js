@@ -118,6 +118,38 @@
     return Array.prototype.slice.call(resultsEl.querySelectorAll('.doc-search-result'));
   }
 
+  function hasTagFilter(query) {
+    return String(query || '').trim().split(/\s+/).some(function (token) {
+      return token.toLowerCase().indexOf('tag:') === 0 && token.length > 4;
+    });
+  }
+
+  function renderEmptyState(query) {
+    resultsEl.innerHTML = '';
+    var empty = document.createElement('div');
+    empty.className = 'doc-search-empty';
+    empty.setAttribute('role', 'status');
+
+    var title = document.createElement('div');
+    title.className = 'doc-search-empty-title';
+    title.textContent = '无匹配结果';
+    empty.appendChild(title);
+
+    var hint = document.createElement('div');
+    hint.className = 'doc-search-empty-hint';
+    hint.textContent = '尝试减少关键词或换一个搜索词。';
+    empty.appendChild(hint);
+
+    if (hasTagFilter(query)) {
+      var filterHint = document.createElement('div');
+      filterHint.className = 'doc-search-empty-filter-hint';
+      filterHint.textContent = '点击上方标签过滤条件可移除 tag 限制。';
+      empty.appendChild(filterHint);
+    }
+
+    resultsEl.appendChild(empty);
+  }
+
   function setSelectedResult(selected) {
     var results = searchResults();
     for (var i = 0; i < results.length; i += 1) {
@@ -151,6 +183,7 @@
     if (!results.length) {
       statusEl.textContent = '无匹配结果';
       setResultCount(0, true);
+      renderEmptyState(input.value);
       return;
     }
     statusEl.textContent = results.length + ' 个结果';
