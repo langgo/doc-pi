@@ -49,6 +49,36 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('uses print-friendly layout and hides interactive chrome', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.emulateMedia({ media: 'print' });
+      const printState = await page.evaluate(() => {
+        const displayOf = selector => getComputedStyle(document.querySelector(selector)).display;
+        const mainStyle = getComputedStyle(document.querySelector('.main'));
+        return {
+          sidebarDisplay: displayOf('.sidebar'),
+          floatingActionsDisplay: displayOf('.floating-actions'),
+          backToTopDisplay: displayOf('.back-to-top'),
+          readingProgressDisplay: displayOf('.reading-progress'),
+          mainMarginLeft: mainStyle.marginLeft,
+          mainMaxWidth: mainStyle.maxWidth,
+          contentVisible: getComputedStyle(document.querySelector('.markdown-content')).display !== 'none',
+        };
+      });
+      expect(printState.sidebarDisplay).toBe('none');
+      expect(printState.floatingActionsDisplay).toBe('none');
+      expect(printState.backToTopDisplay).toBe('none');
+      expect(printState.readingProgressDisplay).toBe('none');
+      expect(printState.mainMarginLeft).toBe('0px');
+      expect(printState.mainMaxWidth).toBe('none');
+      expect(printState.contentVisible).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows a back-to-top button after scrolling and returns to top', async () => {
     const page = await browser.newPage();
     try {
