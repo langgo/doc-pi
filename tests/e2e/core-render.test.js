@@ -610,6 +610,7 @@ describe('Core render E2E', () => {
       expect(page.url()).toContain('q=blockquote');
       expect(page.url()).toContain('#L18');
       await page.waitForSelector('#L18.doc-search-line-target', { state: 'attached' });
+      await page.waitForSelector('.doc-search-line-target.line-target-active', { state: 'attached' });
       await page.waitForSelector('.doc-search-hit', { state: 'attached' });
       const highlightedText = await page.$eval('.doc-search-hit', el => el.textContent);
       expect(highlightedText.toLowerCase()).toBe('blockquote');

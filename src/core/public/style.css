@@ -399,6 +399,16 @@ body {
   border-radius: 3px;
   padding: 0 0.1em;
 }
+.doc-search-line-target {
+  scroll-margin-top: 1rem;
+}
+.doc-search-line-target.line-target-active {
+  display: inline-block;
+  width: 0;
+  min-height: 1em;
+  outline: 2px solid #bf8700;
+  outline-offset: 0.15rem;
+}
 
 .toc-nav { padding: 0 0.5rem; flex: 1; overflow-y: auto; }
 .toc-nav ul { list-style: none; }
