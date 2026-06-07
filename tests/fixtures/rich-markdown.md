@@ -31,6 +31,12 @@ graph TD
   A[Start] --> B[Done]
 ```
 
+## Invalid Mermaid
+
+```mermaid
+this is not valid mermaid
+```
+
 ## Raw HTML
 
 <script>window.__docPiMarkdownXss = 1</script>

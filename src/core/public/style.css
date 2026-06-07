@@ -546,6 +546,24 @@ body {
   opacity: 1;
 }
 
+.mermaid-error {
+  border: 1px solid #f0b8b8;
+  background: #fff8f8;
+  color: #6b1f1f;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.mermaid-error pre {
+  margin: 0.75rem 0;
+  white-space: pre-wrap;
+}
+
+.mermaid-error small {
+  color: #8c2f2f;
+}
+
 /* KaTeX math formula */
 .katex {
   font-size: 1.1em;
