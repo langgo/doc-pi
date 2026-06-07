@@ -473,6 +473,50 @@ describe('AI QA E2E', () => {
     }
   }, 15000);
 
+  it('keeps markdown list markers inside assistant message bounds', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`${baseUrl}/sample-chapter.md`);
+      await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
+      await page.evaluate(() => {
+        const originalFetch = window.fetch;
+        window.fetch = async (input, init) => {
+          const url = String(input);
+          if (url === '/api/ai-qa/sessions' && (!init || init.method === 'GET')) {
+            return new Response(JSON.stringify({ sessions: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/sessions') && init?.method === 'POST') {
+            return new Response(JSON.stringify({ session: { id: 'list-layout-conv', title: '新对话', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastChapterFile: null, messages: [] } }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/chat')) {
+            const encoder = new TextEncoder();
+            return new Response(new ReadableStream({
+              start(controller) {
+                const data = JSON.stringify({ delta: '1. first item\n2. second item\n' });
+                controller.enqueue(encoder.encode('event: text_delta\ndata: ' + data + '\n\nevent: done\ndata: {}\n\n'));
+                controller.close();
+              },
+            }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+          }
+          return originalFetch(input, init);
+        };
+      });
+      await page.evaluate(() => window.__core__.panel.open('ai-qa'));
+      await page.waitForFunction(() => window.__ai_qa_ready__);
+      await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'list');
+      await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
+      await page.waitForSelector('.ai-qa-message.assistant:not(.streaming)');
+      const listStylePosition = await page.evaluate(() => {
+        const message = document.querySelector('.ai-qa-message.assistant:not(.streaming)');
+        message.innerHTML = '<ol><li>first item</li><li>second item</li></ol>';
+        return getComputedStyle(message.querySelector('ol')).listStylePosition;
+      });
+      expect(listStylePosition).toBe('inside');
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
   it('continues streaming after malformed SSE JSON and split chunks', async () => {
     const page = await browser.newPage();
     try {

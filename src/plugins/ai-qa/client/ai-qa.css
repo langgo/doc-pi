@@ -295,6 +295,15 @@
   background: none;
   padding: 0;
 }
+.ai-qa-message.assistant ul,
+.ai-qa-message.assistant ol {
+  margin: 6px 0;
+  padding-left: 0;
+  list-style-position: inside;
+}
+.ai-qa-message.assistant li {
+  margin: 2px 0;
+}
 .ai-qa-message.assistant a {
   color: #0969da;
 }
