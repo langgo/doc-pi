@@ -100,6 +100,23 @@ describe('markdown', () => {
       expect(html).toContain('<h');
     });
 
+    it('should secure external links without changing local or hash links', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-link-safety.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, '[External](https://example.com)\n[Local](/sample-chapter.md)\n[Hash](#section)\n[Mail](mailto:test@example.com)\n[Bad](javascript:alert(1))\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('<a href="https://example.com" target="_blank" rel="noopener noreferrer">External</a>');
+        expect(html).toContain('<a href="/sample-chapter.md">Local</a>');
+        expect(html).toContain('<a href="#section">Hash</a>');
+        expect(html).toContain('<a href="mailto:test@example.com">Mail</a>');
+        expect(html).not.toContain('javascript:alert');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
     it('should render heading self-links for copyable anchors', async () => {
       const fs = await import('fs/promises');
       const tmpPath = path.join(ROOT_DIR, 'data', 'test-heading-anchor.md');
