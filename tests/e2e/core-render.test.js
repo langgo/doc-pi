@@ -619,6 +619,9 @@ describe('Core render E2E', () => {
       expect(highlightedText.toLowerCase()).toBe('blockquote');
       await page.fill('.doc-search-input', '');
       await page.waitForTimeout(150);
+      const clearedUrl = new URL(page.url());
+      expect(clearedUrl.searchParams.get('q')).toBe(null);
+      expect(clearedUrl.hash).toBe('');
       expect(await page.$eval('#L18', el => el.classList.contains('line-target-active'))).toBe(false);
       expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(false);
       expect(await page.$$('.doc-search-hit')).toHaveLength(0);
