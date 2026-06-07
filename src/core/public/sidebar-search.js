@@ -380,6 +380,12 @@
       });
       link.innerHTML = '<span class="doc-search-title">' + escapeHtml(result.title) + '</span>' +
         '<span class="doc-search-meta">' + escapeHtml(result.file) + ':' + result.line + '</span>';
+      if (typeof result.readingMinutes === 'number' && typeof result.readingCount === 'number') {
+        var statsEl = document.createElement('span');
+        statsEl.className = 'doc-search-reading-stats';
+        statsEl.textContent = '约 ' + result.readingMinutes + ' 分钟 · ' + result.readingCount + ' 字';
+        link.appendChild(statsEl);
+      }
       if (Array.isArray(result.tags) && result.tags.length) {
         var tagsEl = document.createElement('span');
         tagsEl.className = 'doc-search-tags';

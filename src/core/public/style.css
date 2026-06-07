@@ -370,6 +370,13 @@ body {
 }
 .doc-search-title { font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 .doc-search-meta { color: #656d76; font-size: 0.6875rem; white-space: nowrap; }
+.doc-search-reading-stats {
+  display: block;
+  color: #656d76;
+  font-size: 0.6875rem;
+  white-space: nowrap;
+  margin-top: 0.125rem;
+}
 .doc-search-tags {
   display: flex;
   flex-wrap: wrap;
