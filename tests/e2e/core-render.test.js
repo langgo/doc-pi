@@ -28,6 +28,21 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows active tag filter chips for tag searches only', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-filter-chip');
+      expect(await page.$$eval('.doc-search-filter-chip', chips => chips.map(chip => chip.textContent))).toEqual(['tag:docs']);
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForFunction(() => document.querySelectorAll('.doc-search-filter-chip').length === 0);
+      expect(await page.$$('.doc-search-result')).not.toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('filters sidebar search results by tag tokens', async () => {
     const page = await browser.newPage();
     try {

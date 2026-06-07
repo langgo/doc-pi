@@ -1,8 +1,9 @@
 (function () {
   var input = document.querySelector('.doc-search-input');
   var statusEl = document.querySelector('.doc-search-status');
+  var filtersEl = document.querySelector('.doc-search-filters');
   var resultsEl = document.querySelector('.doc-search-results');
-  if (!input || !statusEl || !resultsEl) return;
+  if (!input || !statusEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
   var timer = null;
@@ -19,6 +20,18 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function renderFilters(query) {
+    filtersEl.innerHTML = '';
+    var tokens = String(query || '').trim().split(/\s+/).filter(Boolean);
+    for (var i = 0; i < tokens.length; i += 1) {
+      if (tokens[i].toLowerCase().indexOf('tag:') !== 0 || tokens[i].length <= 4) continue;
+      var chip = document.createElement('span');
+      chip.className = 'doc-search-filter-chip';
+      chip.textContent = tokens[i];
+      filtersEl.appendChild(chip);
+    }
   }
 
   function renderResults(results) {
@@ -48,6 +61,7 @@
 
   async function runSearch(query) {
     var requestId = ++activeRequest;
+    renderFilters(query);
     if (!query.trim()) {
       clearResults('');
       return;
