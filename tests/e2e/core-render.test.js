@@ -28,6 +28,34 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('restores sidebar search from the URL query parameter', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md?q=tag%3Adocs%20footnote');
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('tag:docs footnote');
+      expect(await page.$$eval('.doc-search-filter-chip', chips => chips.map(chip => chip.textContent))).toEqual(['tag:docs']);
+      expect(new URL(page.url()).searchParams.get('q')).toBe('tag:docs footnote');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('keeps the URL query parameter in sync with sidebar search input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => new URL(location.href).searchParams.get('q') === 'footnote');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !new URL(location.href).searchParams.has('q'));
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('supports keyboard navigation in sidebar search results', async () => {
     const page = await browser.newPage();
     try {
