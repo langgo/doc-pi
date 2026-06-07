@@ -25,12 +25,17 @@ body {
   scroll-behavior: smooth;
   display: flex;
   flex-direction: column;
+  transition: transform 0.16s ease;
 }
 
 .sidebar-header {
   padding: 0 1rem 0.75rem;
   border-bottom: 1px solid #d0d7de;
   margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .sidebar-header a {
@@ -41,6 +46,32 @@ body {
 }
 
 .sidebar-header a:hover { color: #0969da; }
+
+.sidebar-collapse-toggle {
+  border: 1px solid #d0d7de;
+  background: #fff;
+  color: #57606a;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 1.75rem;
+  height: 1.5rem;
+  line-height: 1;
+}
+.sidebar-collapse-toggle:hover { color: #0969da; border-color: #0969da; }
+.app.sidebar-collapsed .sidebar {
+  transform: translateX(-260px);
+}
+.app.sidebar-collapsed .main {
+  margin-left: 0;
+  max-width: 100vw;
+}
+.app.sidebar-collapsed .sidebar-collapse-toggle {
+  position: fixed;
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 220;
+  transform: translateX(260px);
+}
 
 .doc-search {
   padding: 0 0.75rem 0.75rem;

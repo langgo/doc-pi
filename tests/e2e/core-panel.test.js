@@ -17,6 +17,27 @@ describe('Core panel E2E', () => {
     if (server) await server.stop();
   });
 
+  it('collapses sidebar and persists collapsed state across refresh', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await waitForCore(page);
+      await page.evaluate(() => localStorage.removeItem('core-sidebar-collapsed'));
+      await page.click('.sidebar-collapse-toggle');
+      await page.waitForSelector('.app.sidebar-collapsed');
+      expect(await page.evaluate(() => localStorage.getItem('core-sidebar-collapsed'))).toBe('1');
+      const collapsedLeft = await page.$eval('.main', el => getComputedStyle(el).marginLeft);
+      expect(collapsedLeft).toBe('0px');
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.app.sidebar-collapsed');
+      await page.click('.sidebar-collapse-toggle');
+      await page.waitForFunction(() => !document.querySelector('.app')?.classList.contains('sidebar-collapsed'));
+      expect(await page.evaluate(() => localStorage.getItem('core-sidebar-collapsed'))).toBe('0');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('opens plugin tab and keeps panel visible when viewport shrinks', async () => {
     const page = await browser.newPage();
     try {
