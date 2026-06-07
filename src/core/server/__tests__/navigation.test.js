@@ -99,5 +99,12 @@ describe('navigation', () => {
       expect(html).not.toContain('README');
       expect(html).not.toContain('AGENTS');
     });
+
+    it('should show the active sidebar chapter position', async () => {
+      const html = await buildFileListToc(fixtureRoot, '02-B.md');
+      expect(html).toContain('class="toc-chapter-position"');
+      expect(html).toContain('aria-label="当前第 2 章，共 2 章"');
+      expect(html).toContain('2/2');
+    });
   });
 });

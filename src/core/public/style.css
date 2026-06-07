@@ -422,7 +422,9 @@ body {
 .toc-nav li { margin: 0; }
 
 .toc-nav a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
   padding: 0.25rem 0.75rem;
   color: #656d76;
   text-decoration: none;
@@ -431,7 +433,18 @@ body {
   transition: background 0.12s;
   white-space: nowrap;
   overflow: hidden;
+}
+.toc-chapter-title {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
+}
+.toc-chapter-position {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #656d76;
+  font-size: 0.6875rem;
+  font-weight: 600;
 }
 
 .toc-nav a:hover { background: #ddf4ff; color: #0969da; }
