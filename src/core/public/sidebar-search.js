@@ -19,7 +19,10 @@
     var url = new URL(window.location.href);
     var trimmed = String(query || '').trim();
     if (trimmed) url.searchParams.set('q', trimmed);
-    else url.searchParams.delete('q');
+    else {
+      url.searchParams.delete('q');
+      if (/^#L\d+$/.test(url.hash || '')) url.hash = '';
+    }
     window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
   }
 
