@@ -28,6 +28,29 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('marks the keyboard-focused recent sidebar search as selected', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.setItem('doc-pi:recent-searches', JSON.stringify(['footnote'])));
+      await page.focus('.doc-search-input');
+      await page.waitForSelector('.doc-search-recent-item');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.querySelector('.doc-search-recent-item')?.getAttribute('aria-selected') === 'true');
+      await page.keyboard.press('ArrowDown');
+      await page.waitForFunction(() => {
+        const item = document.querySelector('.doc-search-recent-item');
+        const clear = document.querySelector('.doc-search-clear-recent');
+        return item?.getAttribute('aria-selected') === 'false' && clear?.getAttribute('aria-selected') === 'true';
+      });
+      await page.keyboard.press('ArrowUp');
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('.doc-search-recent-item, .doc-search-clear-recent')).every(item => item.getAttribute('aria-selected') === 'false'));
+    } finally {
+      await page.close();
+    }
+  });
+
   it('supports keyboard navigation for recent sidebar searches', async () => {
     const page = await browser.newPage();
     try {

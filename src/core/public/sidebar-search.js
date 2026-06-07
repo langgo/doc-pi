@@ -123,10 +123,21 @@
     return Array.prototype.slice.call(resultsEl.querySelectorAll('.doc-search-recent-item, .doc-search-clear-recent'));
   }
 
+  function setSelectedRecent(selected) {
+    var controls = recentControls();
+    for (var i = 0; i < controls.length; i += 1) {
+      var isSelected = controls[i] === selected;
+      controls[i].classList.toggle('search-selected', isSelected);
+      controls[i].setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    }
+  }
+
   function focusRecent(index) {
     var controls = recentControls();
     if (!controls.length) return false;
-    controls[Math.max(0, Math.min(index, controls.length - 1))].focus();
+    var control = controls[Math.max(0, Math.min(index, controls.length - 1))];
+    control.focus();
+    setSelectedRecent(control);
     return true;
   }
 
@@ -173,6 +184,7 @@
       item.className = 'doc-search-recent-item';
       item.textContent = recent[i];
       item.setAttribute('aria-label', '重新搜索 ' + recent[i]);
+      item.setAttribute('aria-selected', 'false');
       resultsEl.appendChild(item);
     }
     var clearRecent = document.createElement('button');
@@ -180,6 +192,7 @@
     clearRecent.className = 'doc-search-clear-recent';
     clearRecent.textContent = '清空最近搜索';
     clearRecent.setAttribute('aria-label', '清空最近搜索');
+    clearRecent.setAttribute('aria-selected', 'false');
     resultsEl.appendChild(clearRecent);
     return true;
   }
@@ -335,8 +348,10 @@
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault();
-        if (recentIndex <= 0) input.focus();
-        else focusRecent(recentIndex - 1);
+        if (recentIndex <= 0) {
+          input.focus();
+          setSelectedRecent(null);
+        } else focusRecent(recentIndex - 1);
         return;
       }
       if (event.key === 'Escape') {
