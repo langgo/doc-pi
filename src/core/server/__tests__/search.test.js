@@ -15,6 +15,19 @@ afterEach(async () => {
 });
 
 describe('searchMarkdownFiles', () => {
+  it('filters search results by tag tokens', async () => {
+    await writeFile(path.join(tmpRoot, 'docs.md'), '---\ntitle: Docs\ntags: docs, guide\n---\n# Docs\nSearchable topic.\n', 'utf-8');
+    await writeFile(path.join(tmpRoot, 'notes.md'), '---\ntitle: Notes\ntags: notes\n---\n# Notes\nSearchable topic.\n', 'utf-8');
+
+    const matched = await searchMarkdownFiles(tmpRoot, 'tag:docs searchable');
+    const missing = await searchMarkdownFiles(tmpRoot, 'tag:missing searchable');
+    const multi = await searchMarkdownFiles(tmpRoot, 'tag:docs tag:guide searchable');
+
+    expect(matched.results.map(item => item.file)).toEqual(['docs.md']);
+    expect(missing.results).toEqual([]);
+    expect(multi.results.map(item => item.file)).toEqual(['docs.md']);
+  });
+
   it('returns frontmatter tags with search results', async () => {
     await writeFile(path.join(tmpRoot, 'tagged.md'), '---\ntitle: Tagged Doc\ntags: docs, guide\n---\n# Tagged\nSearchable topic.\n', 'utf-8');
     await writeFile(path.join(tmpRoot, 'plain.md'), '# Plain\nSearchable topic.\n', 'utf-8');
