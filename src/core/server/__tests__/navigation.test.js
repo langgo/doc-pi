@@ -19,16 +19,16 @@ afterAll(async () => {
 
 describe('navigation', () => {
   describe('getChapterFiles', () => {
-    it('should return sorted chapter files matching pattern', async () => {
+    it('should return README first followed by sorted markdown chapters', async () => {
       const files = await getChapterFiles(fixtureRoot);
       expect(Array.isArray(files)).toBe(true);
       expect(files.length).toBeGreaterThan(0);
-      // All should match NN-xxx.md pattern
-      for (const f of files) {
-        expect(f).toMatch(/^\d{2}-.+\.md$/);
+      expect(files[0]).toBe('README.md');
+      for (const f of files.slice(1)) {
+        expect(f.endsWith('.md')).toBe(true);
+        expect(f).not.toBe('AGENTS.md');
       }
-      // Should be sorted
-      for (let i = 1; i < files.length; i++) {
+      for (let i = 2; i < files.length; i++) {
         expect(files[i] > files[i - 1]).toBe(true);
       }
     });

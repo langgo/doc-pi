@@ -38,7 +38,8 @@ async function handleMarkdown(filePath, chapterFiles, pluginInjections) {
 
   const title = frontmatterResult.metadata?.title || currentFile;
   const chapterNav = getChapterNav(currentFile, chapterFiles);
-  const contentWithNav = chapterNav + html + chapterNav;
+  const bottomChapterNav = getChapterNav(currentFile, chapterFiles, { position: 'bottom', withLabels: true });
+  const contentWithNav = chapterNav + html + bottomChapterNav;
 
   return renderHtml({ title, content: contentWithNav, tocHtml, currentFile, pluginInjections });
 }
