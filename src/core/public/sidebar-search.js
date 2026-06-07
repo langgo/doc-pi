@@ -119,6 +119,17 @@
     return Array.prototype.slice.call(resultsEl.querySelectorAll('.doc-search-result'));
   }
 
+  function recentControls() {
+    return Array.prototype.slice.call(resultsEl.querySelectorAll('.doc-search-recent-item, .doc-search-clear-recent'));
+  }
+
+  function focusRecent(index) {
+    var controls = recentControls();
+    if (!controls.length) return false;
+    controls[Math.max(0, Math.min(index, controls.length - 1))].focus();
+    return true;
+  }
+
   function readRecentSearches() {
     try {
       var value = JSON.parse(window.localStorage.getItem(recentStorageKey) || '[]');
@@ -302,7 +313,7 @@
 
   input.addEventListener('keydown', function (event) {
     if (event.key === 'ArrowDown') {
-      if (focusResult(0)) event.preventDefault();
+      if (focusResult(0) || focusRecent(0)) event.preventDefault();
       return;
     }
     if (event.key === 'Escape') {
@@ -314,6 +325,28 @@
   });
 
   resultsEl.addEventListener('keydown', function (event) {
+    var controls = recentControls();
+    var recentIndex = controls.indexOf(document.activeElement);
+    if (recentIndex !== -1) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        focusRecent(recentIndex + 1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (recentIndex <= 0) input.focus();
+        else focusRecent(recentIndex - 1);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        clearSearch();
+        input.focus();
+      }
+      return;
+    }
+
     var results = searchResults();
     var index = results.indexOf(document.activeElement);
     if (index === -1) return;
