@@ -189,6 +189,15 @@ body {
   border-color: #0969da;
   box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
 }
+.doc-search-input-wrap.search-error .doc-search-input {
+  border-color: #cf222e;
+}
+.doc-search-input-wrap.search-error .doc-search-input:focus {
+  box-shadow: 0 0 0 2px rgba(207, 34, 46, 0.15);
+}
+.doc-search-input-wrap.search-error + .doc-search-status {
+  color: #cf222e;
+}
 .doc-search-status {
   color: #656d76;
   font-size: 0.6875rem;
