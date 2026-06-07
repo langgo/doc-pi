@@ -13,7 +13,23 @@
     }, 1400);
   }
 
+  function languageFrom(pre) {
+    var code = pre.querySelector('code');
+    if (!code) return '';
+    var match = Array.prototype.find.call(code.classList, function (name) {
+      return name.indexOf('language-') === 0;
+    });
+    return match ? match.slice('language-'.length) : '';
+  }
+
   document.querySelectorAll('.markdown-content pre').forEach(function (pre) {
+    var language = languageFrom(pre);
+    if (language && !pre.querySelector('.code-language-label')) {
+      var label = document.createElement('span');
+      label.className = 'code-language-label';
+      label.textContent = language;
+      pre.appendChild(label);
+    }
     if (pre.querySelector('.code-copy-button')) return;
     var button = document.createElement('button');
     button.type = 'button';
