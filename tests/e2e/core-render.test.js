@@ -28,6 +28,26 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('clears sidebar search with the clear button', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForSelector('.doc-search-clear:not([hidden])');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === '');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+      expect(await page.$$('.doc-search-filter-chip')).toHaveLength(0);
+      expect(await page.$eval('.doc-search-count', el => el.hidden)).toBe(true);
+      expect(new URL(page.url()).searchParams.has('q')).toBe(false);
+      expect(await page.$eval('.doc-search-input', el => document.activeElement === el)).toBe(true);
+      expect(await page.$eval('.doc-search-clear', el => el.hidden)).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows a sidebar search result count badge', async () => {
     const page = await browser.newPage();
     try {

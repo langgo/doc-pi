@@ -1,10 +1,11 @@
 (function () {
   var input = document.querySelector('.doc-search-input');
+  var clearButton = document.querySelector('.doc-search-clear');
   var countEl = document.querySelector('.doc-search-count');
   var statusEl = document.querySelector('.doc-search-status');
   var filtersEl = document.querySelector('.doc-search-filters');
   var resultsEl = document.querySelector('.doc-search-results');
-  if (!input || !countEl || !statusEl || !filtersEl || !resultsEl) return;
+  if (!input || !clearButton || !countEl || !statusEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
   var timer = null;
@@ -21,6 +22,10 @@
     countEl.textContent = String(count);
     countEl.setAttribute('aria-label', count + ' 个搜索结果');
     countEl.hidden = !visible;
+  }
+
+  function setClearVisible(query) {
+    clearButton.hidden = !String(query || '').trim();
   }
 
   function clearResults(message) {
@@ -117,6 +122,7 @@
 
   function clearSearch() {
     input.value = '';
+    setClearVisible('');
     renderFilters('');
     clearResults('');
     syncUrl('');
@@ -172,6 +178,7 @@
 
   async function runSearch(query) {
     var requestId = ++activeRequest;
+    setClearVisible(query);
     renderFilters(query);
     if (!query.trim()) {
       clearResults('');
@@ -240,6 +247,11 @@
     if (!resultsEl.contains(document.activeElement)) setSelectedResult(null);
   });
 
+  clearButton.addEventListener('click', function () {
+    clearSearch();
+    input.focus();
+  });
+
   filtersEl.addEventListener('click', function (event) {
     var chip = event.target.closest('.doc-search-filter-chip');
     if (!chip) return;
@@ -251,6 +263,7 @@
 
   input.addEventListener('input', function () {
     var query = input.value;
+    setClearVisible(query);
     syncUrl(query);
     clearTimeout(timer);
     timer = setTimeout(function () {
@@ -261,6 +274,7 @@
   var initialQuery = new URL(window.location.href).searchParams.get('q') || '';
   if (initialQuery) {
     input.value = initialQuery;
+    setClearVisible(initialQuery);
     runSearch(initialQuery);
   }
 })();
