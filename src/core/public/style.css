@@ -425,7 +425,10 @@ body {
 .markdown-content blockquote > :first-child { margin-top: 0; }
 .markdown-content blockquote > :last-child { margin-bottom: 0; }
 
-.markdown-content img { max-width: 100%; }
+.markdown-content img {
+  max-width: 100%;
+  cursor: zoom-in;
+}
 
 .markdown-content hr {
   height: 0.25em;
@@ -518,10 +521,12 @@ body {
   justify-content: center;
 }
 
-.lightbox-content svg {
+.lightbox-content svg,
+.lightbox-content img {
   width: 100%;
   height: auto;
   max-height: 100%;
+  object-fit: contain;
 }
 
 .lightbox-close {
