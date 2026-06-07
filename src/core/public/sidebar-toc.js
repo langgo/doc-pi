@@ -30,6 +30,7 @@
     activeLink = link;
     if (link) {
       link.classList.add('active');
+      if (location.hash && /^#L\d+$/.test(location.hash)) return;
       // Update URL hash without adding history entries
       const href = link.getAttribute('href');
       const hashIdx = href.indexOf('#');

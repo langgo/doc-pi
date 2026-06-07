@@ -236,6 +236,21 @@ export async function processMarkdown(filePath) {
     .replace(/<li>(\s*<input[^>]*type="checkbox"[^>]*>)/g, '<li class="task-list-item">$1')
     .replace(/<ul>\s*(<li class="task-list-item">)/g, '<ul class="task-list">$1');
 
+  let sourceLine = 0;
+  let inSourceFence = false;
+  for (const line of mdContent.split(/\r?\n/)) {
+    sourceLine += 1;
+    const rawText = line.trim();
+    if (/^```/.test(rawText)) {
+      inSourceFence = !inSourceFence;
+      continue;
+    }
+    if (inSourceFence || !rawText || /^#{1,6}\s+/.test(rawText) || /^[-*+]\s+/.test(rawText)) continue;
+    const text = rawText.replace(/^>\s+/, '');
+    const renderedText = escapeHtml(text).replace(/\*\*/g, '').replace(/`/g, '');
+    html = html.replace(renderedText, '<span id="L' + sourceLine + '" class="doc-search-line-target"></span>' + renderedText);
+  }
+
   // Restore mermaid blocks as plain divs for mermaid.js
   html = html.replace(/<!--MERMAID_(\d+)-->/g, (_, idx) => {
     const code = mermaidBlocks[parseInt(idx)];

@@ -312,7 +312,42 @@
       link.className = 'doc-search-result';
       link.tabIndex = -1;
       link.setAttribute('aria-selected', 'false');
-      link.href = '/' + encodeURIComponent(result.file) + '?q=' + encodeURIComponent(input.value.trim());
+      link.href = '/' + encodeURIComponent(result.file) + '?q=' + encodeURIComponent(input.value.trim()) + '#L' + encodeURIComponent(result.line);
+      link.addEventListener('click', function (event) {
+        event.stopPropagation();
+        if (link.pathname === window.location.pathname) {
+          setTimeout(function () {
+            var params = new URLSearchParams(window.location.search || '');
+            var query = (params.get('q') || '').trim();
+            if (!query) return;
+            var root = document.querySelector('.markdown-content');
+            if (!root || root.querySelector('.doc-search-hit')) return;
+            var lower = query.toLowerCase();
+            var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+              acceptNode: function (textNode) {
+                if (!textNode.nodeValue || !textNode.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                var parent = textNode.parentElement;
+                if (!parent || parent.closest('script, style, code, pre, .doc-search-hit')) return NodeFilter.FILTER_REJECT;
+                return textNode.nodeValue.toLowerCase().indexOf(lower) !== -1 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+              },
+            });
+            var textNode = walker.nextNode();
+            if (!textNode) return;
+            var value = textNode.nodeValue;
+            var index = value.toLowerCase().indexOf(lower);
+            var mark = document.createElement('mark');
+            mark.className = 'doc-search-hit';
+            mark.textContent = value.slice(index, index + query.length);
+            textNode.parentNode.insertBefore(document.createTextNode(value.slice(0, index)), textNode);
+            textNode.parentNode.insertBefore(mark, textNode);
+            textNode.parentNode.insertBefore(document.createTextNode(value.slice(index + query.length)), textNode);
+            textNode.parentNode.removeChild(textNode);
+          }, 0);
+          return;
+        }
+        event.preventDefault();
+        window.location.assign(link.href);
+      });
       link.innerHTML = '<span class="doc-search-title">' + escapeHtml(result.title) + '</span>' +
         '<span class="doc-search-meta">' + escapeHtml(result.file) + ':' + result.line + '</span>';
       if (Array.isArray(result.tags) && result.tags.length) {
