@@ -28,6 +28,47 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('does not run a pending debounced search after clearing input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      const requestedQueries = [];
+      await page.route('**/api/search?q=*', async route => {
+        requestedQueries.push(new URL(route.request().url()).searchParams.get('q'));
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.click('.doc-search-clear');
+      await page.waitForTimeout(180);
+      expect(requestedQueries).toEqual([]);
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('does not run a pending debounced search after Escape clears input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      const requestedQueries = [];
+      await page.route('**/api/search?q=*', async route => {
+        requestedQueries.push(new URL(route.request().url()).searchParams.get('q'));
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.press('.doc-search-input', 'Escape');
+      await page.waitForTimeout(180);
+      expect(requestedQueries).toEqual([]);
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('aborts stale sidebar search requests', async () => {
     const page = await browser.newPage();
     try {

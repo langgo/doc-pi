@@ -276,6 +276,7 @@
   }
 
   function clearSearch() {
+    clearTimeout(timer);
     abortActiveSearch();
     input.value = '';
     setClearVisible('');
