@@ -96,6 +96,23 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('highlights matched text in sidebar search snippets', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-snippet-hit');
+      const firstHit = await page.$eval('.doc-search-snippet-hit', el => ({
+        text: el.textContent,
+        tagName: el.tagName,
+      }));
+      expect(firstHit).toEqual({ text: 'footnote', tagName: 'MARK' });
+      expect(await page.$$eval('.doc-search-filter-chip .doc-search-snippet-hit', hits => hits.length)).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows frontmatter tags in sidebar search results', async () => {
     const page = await browser.newPage();
     try {

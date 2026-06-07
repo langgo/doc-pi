@@ -199,7 +199,8 @@ body {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.doc-search-hit {
+.doc-search-hit,
+.doc-search-snippet-hit {
   background: #fff8c5;
   color: inherit;
   border-radius: 3px;

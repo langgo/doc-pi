@@ -28,6 +28,49 @@
     }).join(' ');
   }
 
+  function searchableTerms(query) {
+    var seen = Object.create(null);
+    return String(query || '').trim().split(/\s+/).filter(function (token) {
+      if (!token || token.toLowerCase().indexOf('tag:') === 0) return false;
+      var key = token.toLowerCase();
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+
+  function appendHighlightedText(parent, text, terms) {
+    var source = String(text || '');
+    if (!terms.length) {
+      parent.textContent = source;
+      return;
+    }
+
+    var lowerSource = source.toLowerCase();
+    var cursor = 0;
+    while (cursor < source.length) {
+      var nextIndex = -1;
+      var nextTerm = '';
+      for (var i = 0; i < terms.length; i += 1) {
+        var term = terms[i];
+        var index = lowerSource.indexOf(term.toLowerCase(), cursor);
+        if (index === -1) continue;
+        if (nextIndex === -1 || index < nextIndex || (index === nextIndex && term.length > nextTerm.length)) {
+          nextIndex = index;
+          nextTerm = term;
+        }
+      }
+      if (nextIndex === -1) break;
+      if (nextIndex > cursor) parent.appendChild(document.createTextNode(source.slice(cursor, nextIndex)));
+      var mark = document.createElement('mark');
+      mark.className = 'doc-search-snippet-hit';
+      mark.textContent = source.slice(nextIndex, nextIndex + nextTerm.length);
+      parent.appendChild(mark);
+      cursor = nextIndex + nextTerm.length;
+    }
+    if (cursor < source.length) parent.appendChild(document.createTextNode(source.slice(cursor)));
+  }
+
   function renderFilters(query) {
     filtersEl.innerHTML = '';
     var tokens = String(query || '').trim().split(/\s+/).filter(Boolean);
@@ -62,6 +105,7 @@
   }
 
   function renderResults(results) {
+    var terms = searchableTerms(input.value);
     resultsEl.innerHTML = '';
     if (!results.length) {
       statusEl.textContent = '无匹配结果';
@@ -74,15 +118,23 @@
       link.className = 'doc-search-result';
       link.tabIndex = -1;
       link.href = '/' + encodeURIComponent(result.file) + '?q=' + encodeURIComponent(input.value.trim());
-      var tags = Array.isArray(result.tags) && result.tags.length
-        ? '<span class="doc-search-tags">' + result.tags.map(function (tag) {
-          return '<span class="doc-search-tag">' + escapeHtml(tag) + '</span>';
-        }).join('') + '</span>'
-        : '';
       link.innerHTML = '<span class="doc-search-title">' + escapeHtml(result.title) + '</span>' +
-        '<span class="doc-search-meta">' + escapeHtml(result.file) + ':' + result.line + '</span>' +
-        tags +
-        '<span class="doc-search-snippet">' + escapeHtml(result.snippet) + '</span>';
+        '<span class="doc-search-meta">' + escapeHtml(result.file) + ':' + result.line + '</span>';
+      if (Array.isArray(result.tags) && result.tags.length) {
+        var tagsEl = document.createElement('span');
+        tagsEl.className = 'doc-search-tags';
+        for (var tagIndex = 0; tagIndex < result.tags.length; tagIndex += 1) {
+          var tagEl = document.createElement('span');
+          tagEl.className = 'doc-search-tag';
+          tagEl.textContent = result.tags[tagIndex];
+          tagsEl.appendChild(tagEl);
+        }
+        link.appendChild(tagsEl);
+      }
+      var snippetEl = document.createElement('span');
+      snippetEl.className = 'doc-search-snippet';
+      appendHighlightedText(snippetEl, result.snippet, terms);
+      link.appendChild(snippetEl);
       resultsEl.appendChild(link);
     }
   }
