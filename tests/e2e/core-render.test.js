@@ -234,6 +234,7 @@ describe('Core render E2E', () => {
       expect(await page.$('.markdown-content')).not.toBeNull();
       const h1 = await page.$eval('.markdown-content h1', el => el.childNodes[0].textContent.trim());
       const paragraph = await page.$eval('.markdown-content p', el => el.textContent.trim());
+      expect(await page.title()).toBe('sample-chapter.md - Fixtures');
       expect(h1).toBe('Sample Chapter for Testing');
       expect(paragraph).toContain('This is a test paragraph');
     } finally {

@@ -58,7 +58,7 @@ export function buildTocHtml(headings, currentFile) {
   return html;
 }
 
-function extractFrontmatter(mdContent) {
+export function extractFrontmatter(mdContent) {
   if (!mdContent.startsWith('---\n')) return { mdContent, metadata: null };
   const end = mdContent.indexOf('\n---', 4);
   if (end === -1) return { mdContent, metadata: null };
