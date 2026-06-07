@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'fs/promises';
 import path from 'path';
-import { stripBOM } from './markdown.js';
+import { stripBOM, extractFrontmatter } from './markdown.js';
 
 function extractTitle(fileName, content) {
   const match = content.match(/^#\s+(.+)$/m);
@@ -24,8 +24,13 @@ export async function searchMarkdownFiles(rootDir, query, options = {}) {
 
   for (const file of files) {
     const fullPath = path.join(rootDir, file);
-    const content = stripBOM(await readFile(fullPath, 'utf-8'));
-    const title = extractTitle(file, content);
+    const rawContent = stripBOM(await readFile(fullPath, 'utf-8'));
+    const frontmatter = extractFrontmatter(rawContent);
+    const content = frontmatter.mdContent;
+    const title = frontmatter.metadata?.title || extractTitle(file, content);
+    const tags = frontmatter.metadata?.tags
+      ? frontmatter.metadata.tags.split(',').map(tag => tag.trim()).filter(Boolean)
+      : [];
     const lines = content.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
@@ -35,6 +40,7 @@ export async function searchMarkdownFiles(rootDir, query, options = {}) {
         line: index + 1,
         title,
         snippet: line.trim(),
+        tags,
       });
       if (results.length >= limit) {
         return { query: normalized, results };

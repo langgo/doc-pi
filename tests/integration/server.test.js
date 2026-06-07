@@ -98,6 +98,7 @@ describe('HTTP routing integration', () => {
       line: 18,
       title: 'Sample Chapter for Testing',
       snippet: '> A blockquote for testing.',
+      tags: [],
     });
   });
 

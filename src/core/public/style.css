@@ -158,6 +158,20 @@ body {
 }
 .doc-search-title { font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 .doc-search-meta { color: #656d76; font-size: 0.6875rem; white-space: nowrap; }
+.doc-search-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+.doc-search-tag {
+  border-radius: 999px;
+  background: #ddf4ff;
+  color: #0969da;
+  font-size: 0.625rem;
+  line-height: 1rem;
+  padding: 0 0.375rem;
+}
 .doc-search-snippet {
   color: #57606a;
   font-size: 0.6875rem;
