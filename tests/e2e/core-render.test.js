@@ -28,6 +28,39 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('ignores stale sidebar search responses', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let releaseSlow;
+      const slowReleased = new Promise(resolve => { releaseSlow = resolve; });
+      await page.route('**/api/search?q=*', async route => {
+        const url = new URL(route.request().url());
+        const query = url.searchParams.get('q');
+        if (query === 'slow') {
+          await slowReleased;
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ file: 'slow.md', title: 'Slow Result', line: 1, snippet: 'stale slow result', tags: [] }] }) });
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'slow');
+      await page.waitForSelector('.doc-search-input-wrap.search-loading');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      const titleBeforeSlow = await page.$eval('.doc-search-result .doc-search-title', el => el.textContent);
+      releaseSlow();
+      await page.waitForTimeout(150);
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('footnote');
+      expect(await page.$eval('.doc-search-result .doc-search-title', el => el.textContent)).toBe(titleBeforeSlow);
+      expect(await page.$eval('.doc-search-status', el => el.textContent)).toBe('2 个结果');
+      expect(await page.$eval('.doc-search-count', el => el.textContent)).toBe('2');
+      expect(await page.$$('.doc-search-result')).toHaveLength(2);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('retries failed sidebar searches', async () => {
     const page = await browser.newPage();
     try {
