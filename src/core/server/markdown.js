@@ -74,6 +74,23 @@ export function extractFrontmatter(mdContent) {
   return { mdContent: mdContent.slice(end + 4).replace(/^\n+/, ''), metadata };
 }
 
+function estimateReadingMinutes(mdContent) {
+  const text = mdContent
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[#>*_`\[\]()|:-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return 1;
+  const cjkCount = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  const wordCount = (text.replace(/[\u4e00-\u9fff]/g, ' ').match(/[A-Za-z0-9]+/g) || []).length;
+  return Math.max(1, Math.ceil((cjkCount + wordCount) / 220));
+}
+
+function renderReadingTime(minutes) {
+  return '<div class="reading-time" aria-label="预计阅读时间 ' + minutes + ' 分钟">约 ' + minutes + ' 分钟阅读</div>';
+}
+
 function renderFrontmatterMetadata(metadata) {
   if (!metadata || (!metadata.title && !metadata.description && !metadata.tags)) return '';
   let html = '<section class="frontmatter-metadata" aria-label="文档元数据">';
@@ -147,6 +164,7 @@ export async function processMarkdown(filePath) {
   const footnoteResult = extractFootnotes(mdContent);
   mdContent = footnoteResult.mdContent;
   const footnotes = footnoteResult.footnotes;
+  const readingMinutes = estimateReadingMinutes(mdContent);
 
   // Replace mermaid blocks with placeholders before marked processing
   const mermaidBlocks = [];
@@ -221,7 +239,7 @@ export async function processMarkdown(filePath) {
       return '<' + tag + safeAttrs + '>';
     });
 
-  html = renderFrontmatterMetadata(metadata) + html;
+  html = renderReadingTime(readingMinutes) + renderFrontmatterMetadata(metadata) + html;
   html = secureExternalLinks(html);
 
   // Add id attributes and self-links to headings for TOC anchor navigation.
