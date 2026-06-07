@@ -100,6 +100,22 @@ describe('markdown', () => {
       expect(html).toContain('<h');
     });
 
+    it('should render heading self-links for copyable anchors', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-heading-anchor.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, '# Copy Link\n\n## Deep Section\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('<h1 id="copy-link">');
+        expect(html).toContain('class="heading-anchor"');
+        expect(html).toContain('href="#copy-link"');
+        expect(html).toContain('aria-label="Copy link to Copy Link"');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
     it('should handle mermaid blocks', async () => {
       // Create a temp markdown file with mermaid
       const fs = await import('fs/promises');

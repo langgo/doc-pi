@@ -136,10 +136,12 @@ export async function processMarkdown(filePath) {
       return '<' + tag + safeAttrs + '>';
     });
 
-  // Add id attributes to headings for TOC anchor navigation
+  // Add id attributes and self-links to headings for TOC anchor navigation.
   html = html.replace(/<(h[1-4])>(.*?)<\/\1>/g, (match, tag, text) => {
     const id = slugify(text);
-    return '<' + tag + ' id="' + id + '">' + text + '</' + tag + '>';
+    const plainText = text.replace(/<[^>]*>/g, '').trim();
+    const anchor = '<a class="heading-anchor" href="#' + id + '" aria-label="Copy link to ' + escapeHtml(plainText) + '">#</a>';
+    return '<' + tag + ' id="' + id + '">' + text + anchor + '</' + tag + '>';
   });
 
   // Restore mermaid blocks as plain divs for mermaid.js
