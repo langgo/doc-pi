@@ -28,6 +28,21 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('removes tag filter tokens when clicking query chips', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-filter-chip');
+      await page.click('.doc-search-filter-chip');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === 'footnote');
+      expect(await page.$$('.doc-search-filter-chip')).toHaveLength(0);
+      await page.waitForSelector('.doc-search-result');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows active tag filter chips for tag searches only', async () => {
     const page = await browser.newPage();
     try {

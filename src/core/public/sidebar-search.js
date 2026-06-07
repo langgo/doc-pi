@@ -22,14 +22,23 @@
       .replace(/'/g, '&#39;');
   }
 
+  function removeToken(query, indexToRemove) {
+    return String(query || '').trim().split(/\s+/).filter(function (_, index) {
+      return index !== indexToRemove;
+    }).join(' ');
+  }
+
   function renderFilters(query) {
     filtersEl.innerHTML = '';
     var tokens = String(query || '').trim().split(/\s+/).filter(Boolean);
     for (var i = 0; i < tokens.length; i += 1) {
       if (tokens[i].toLowerCase().indexOf('tag:') !== 0 || tokens[i].length <= 4) continue;
-      var chip = document.createElement('span');
+      var chip = document.createElement('button');
+      chip.type = 'button';
       chip.className = 'doc-search-filter-chip';
       chip.textContent = tokens[i];
+      chip.setAttribute('aria-label', '移除过滤条件 ' + tokens[i]);
+      chip.dataset.tokenIndex = String(i);
       filtersEl.appendChild(chip);
     }
   }
@@ -81,6 +90,15 @@
       clearResults('搜索失败: ' + err.message);
     }
   }
+
+  filtersEl.addEventListener('click', function (event) {
+    var chip = event.target.closest('.doc-search-filter-chip');
+    if (!chip) return;
+    input.value = removeToken(input.value, Number(chip.dataset.tokenIndex));
+    renderFilters(input.value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  });
 
   input.addEventListener('input', function () {
     var query = input.value;
