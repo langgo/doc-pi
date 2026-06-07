@@ -17,13 +17,16 @@ describe('Core render E2E', () => {
     if (server) await server.stop();
   });
 
-  it('shows an estimated reading time for chapter pages', async () => {
+  it('shows reading metadata for chapter pages', async () => {
     const page = await browser.newPage();
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
       await page.waitForSelector('.reading-time');
+      await page.waitForSelector('.chapter-position');
       expect(await page.$eval('.reading-time', el => el.textContent.trim())).toBe('约 1 分钟阅读 · 98 字');
       expect(await page.$eval('.reading-time', el => el.getAttribute('aria-label'))).toBe('预计阅读时间 1 分钟，约 98 字');
+      expect(await page.$eval('.chapter-position', el => el.textContent.trim())).toBe('第 2 / 3 章');
+      expect(await page.$eval('.chapter-position', el => el.getAttribute('aria-label'))).toBe('当前第 2 章，共 3 章');
     } finally {
       await page.close();
     }

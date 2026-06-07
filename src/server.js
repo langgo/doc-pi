@@ -38,8 +38,10 @@ async function handleMarkdown(filePath, chapterFiles, pluginInjections) {
 
   const title = frontmatterResult.metadata?.title || currentFile;
   const chapterNav = getChapterNav(currentFile, chapterFiles);
+  const chapterIndex = chapterFiles.indexOf(currentFile);
+  const chapterPosition = chapterIndex === -1 ? '' : '<div class="chapter-position" aria-label="当前第 ' + (chapterIndex + 1) + ' 章，共 ' + chapterFiles.length + ' 章">第 ' + (chapterIndex + 1) + ' / ' + chapterFiles.length + ' 章</div>';
   const bottomChapterNav = getChapterNav(currentFile, chapterFiles, { position: 'bottom', withLabels: true });
-  const contentWithNav = chapterNav + html + bottomChapterNav;
+  const contentWithNav = chapterNav + chapterPosition + html + bottomChapterNav;
 
   return renderHtml({ title, content: contentWithNav, tocHtml, currentFile, pluginInjections });
 }
