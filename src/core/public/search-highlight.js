@@ -45,6 +45,15 @@
     runHighlight();
   };
 
+  function clearHighlights() {
+    document.querySelectorAll('.doc-search-hit').forEach(function (mark) {
+      var parent = mark.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+      parent.normalize();
+    });
+  }
+
   function clearLineTargets() {
     document.querySelectorAll('.doc-search-line-target.line-target-active').forEach(function (target) {
       target.classList.remove('line-target-active');
@@ -54,6 +63,7 @@
     }
   }
 
+  window.docPiClearSearchHighlights = clearHighlights;
   window.docPiClearSearchLineTargets = clearLineTargets;
 
   function focusLineTarget() {
