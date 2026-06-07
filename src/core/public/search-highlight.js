@@ -1,12 +1,16 @@
 (function () {
   var params = new URLSearchParams(window.location.search || '');
+  window.docPiApplySearchHighlight = null;
   var query = (params.get('q') || '').trim();
+  if (!query) return;
+  query = query.split(/\s+/).filter(function (token) { return token.toLowerCase().indexOf('tag:') !== 0; }).join(' ').trim();
   if (!query) return;
 
   var root = document.querySelector('.markdown-content');
   if (!root) return;
 
   function findTextNode(node) {
+    if (!query) return null;
     var lower = query.toLowerCase();
     var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
       acceptNode: function (textNode) {
@@ -37,9 +41,23 @@
     return mark;
   }
 
-  var textNode = findTextNode(root);
-  var mark = textNode ? highlight(textNode) : null;
-  if (mark) {
-    mark.scrollIntoView({ block: 'center', inline: 'nearest' });
+  window.docPiApplySearchHighlight = function () {
+    runHighlight();
+  };
+
+  function runHighlight() {
+    var textNode = findTextNode(root);
+    var mark = textNode ? highlight(textNode) : null;
+    if (mark) {
+      mark.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
   }
+
+  document.addEventListener('DOMContentLoaded', runHighlight);
+  window.addEventListener('load', runHighlight);
+  window.addEventListener('hashchange', runHighlight);
+  window.addEventListener('popstate', runHighlight);
+  runHighlight();
+  setTimeout(runHighlight, 0);
+  setTimeout(runHighlight, 250);
 })();
