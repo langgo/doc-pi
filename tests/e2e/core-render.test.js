@@ -28,6 +28,27 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows and clears sidebar search loading state', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.route('**/api/search?q=*', async route => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-input-wrap.search-loading');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-loading'));
+      await page.fill('.doc-search-input', 'another query');
+      await page.waitForSelector('.doc-search-input-wrap.search-loading');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-loading'));
+    } finally {
+      await page.close();
+    }
+  });
+
   it('clears sidebar search with the clear button', async () => {
     const page = await browser.newPage();
     try {

@@ -1,11 +1,12 @@
 (function () {
+  var inputWrap = document.querySelector('.doc-search-input-wrap');
   var input = document.querySelector('.doc-search-input');
   var clearButton = document.querySelector('.doc-search-clear');
   var countEl = document.querySelector('.doc-search-count');
   var statusEl = document.querySelector('.doc-search-status');
   var filtersEl = document.querySelector('.doc-search-filters');
   var resultsEl = document.querySelector('.doc-search-results');
-  if (!input || !clearButton || !countEl || !statusEl || !filtersEl || !resultsEl) return;
+  if (!inputWrap || !input || !clearButton || !countEl || !statusEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
   var timer = null;
@@ -28,10 +29,16 @@
     clearButton.hidden = !String(query || '').trim();
   }
 
+  function setLoading(isLoading) {
+    inputWrap.classList.toggle('search-loading', Boolean(isLoading));
+    inputWrap.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+  }
+
   function clearResults(message) {
     resultsEl.innerHTML = '';
     statusEl.textContent = message || '';
     setResultCount(0, false);
+    setLoading(false);
   }
 
   function escapeHtml(value) {
@@ -186,10 +193,12 @@
     }
     statusEl.textContent = '搜索中…';
     setResultCount(0, false);
+    setLoading(true);
     try {
       var res = await fetch('/api/search?q=' + encodeURIComponent(query));
       var body = await res.json();
       if (requestId !== activeRequest) return;
+      setLoading(false);
       if (!res.ok) {
         clearResults(body.error || '搜索失败');
         return;
@@ -197,6 +206,7 @@
       renderResults(body.results || []);
     } catch (err) {
       if (requestId !== activeRequest) return;
+      setLoading(false);
       clearResults('搜索失败: ' + err.message);
     }
   }
