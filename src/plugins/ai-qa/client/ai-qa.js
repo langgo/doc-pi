@@ -615,7 +615,7 @@
 
     var msg = document.createElement('div');
     msg.className = 'ai-qa-message assistant streaming';
-    msg.textContent = '';
+    msg.dataset.rawMarkdown = '';
     messagesEl.appendChild(msg);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return msg;
@@ -623,7 +623,9 @@
 
   function appendToMessage(msgEl, delta) {
     if (!msgEl) return;
-    msgEl.textContent += delta;
+    var raw = (msgEl.dataset.rawMarkdown || '') + delta;
+    msgEl.dataset.rawMarkdown = raw;
+    msgEl.innerHTML = renderMarkdown(raw);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -655,8 +657,9 @@
   function finalizeMessage(msgEl) {
     if (!msgEl) return;
     msgEl.classList.remove('streaming');
-    var raw = msgEl.textContent;
+    var raw = msgEl.dataset.rawMarkdown || msgEl.textContent;
     msgEl.innerHTML = renderMarkdown(raw);
+    delete msgEl.dataset.rawMarkdown;
   }
 
   function renderMarkdown(text) {

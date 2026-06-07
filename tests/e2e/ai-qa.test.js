@@ -323,12 +323,15 @@ describe('AI QA E2E', () => {
           if (url.includes('/api/ai-qa/chat')) {
             window.__aiQaChatCount += 1;
             const encoder = new TextEncoder();
-            const payload = window.__aiQaChatCount === 1
-              ? 'event: thinking_delta\ndata: {"delta":"plan"}\n\nevent: text_delta\ndata: {"delta":"**ok**"}\n\nevent: done\ndata: {}\n\n'
-              : 'event: error\ndata: {"error":"boom"}\n\n';
             const stream = new ReadableStream({
-              start(controller) {
-                controller.enqueue(encoder.encode(payload));
+              async start(controller) {
+                if (window.__aiQaChatCount === 1) {
+                  controller.enqueue(encoder.encode('event: thinking_delta\ndata: {"delta":"plan"}\n\nevent: text_delta\ndata: {"delta":"**ok**"}\n\n'));
+                  await new Promise(resolve => setTimeout(resolve, 50));
+                  controller.enqueue(encoder.encode('event: done\ndata: {}\n\n'));
+                } else {
+                  controller.enqueue(encoder.encode('event: error\ndata: {"error":"boom"}\n\n'));
+                }
                 controller.close();
               },
             });
@@ -344,11 +347,14 @@ describe('AI QA E2E', () => {
       await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'first');
       await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
       await page.waitForFunction(() => document.querySelector('.ai-qa-thinking pre')?.textContent.trim() === 'plan');
+      await page.waitForFunction(() => document.querySelector('.ai-qa-message.assistant.streaming strong')?.textContent === 'ok');
+      const streamingAnswerHtml = await page.$eval('.ai-qa-message.assistant.streaming', el => el.innerHTML);
       await page.waitForFunction(() => document.querySelector('.ai-qa-message.assistant:not(.streaming)')?.innerHTML.includes('ok'));
       const thinkingText = await page.$eval('.ai-qa-thinking pre', el => el.textContent.trim());
-      const answerHtml = await page.$eval('.ai-qa-message.assistant:not(.streaming)', el => el.innerHTML);
+      const finalAnswerHtml = await page.$eval('.ai-qa-message.assistant:not(.streaming)', el => el.innerHTML);
       expect(thinkingText).toBe('plan');
-      expect(answerHtml).toContain('ok');
+      expect(streamingAnswerHtml).toContain('<strong>ok</strong>');
+      expect(finalAnswerHtml).toContain('ok');
 
       await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'second');
       await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
@@ -462,6 +468,50 @@ describe('AI QA E2E', () => {
       await page.waitForSelector('.ai-qa-message.error:has-text("请求失败")');
       const errorText = await page.$eval('.ai-qa-message.error', el => el.textContent);
       expect(errorText).toContain('upstream unavailable');
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
+  it('keeps markdown list markers inside assistant message bounds', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`${baseUrl}/sample-chapter.md`);
+      await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
+      await page.evaluate(() => {
+        const originalFetch = window.fetch;
+        window.fetch = async (input, init) => {
+          const url = String(input);
+          if (url === '/api/ai-qa/sessions' && (!init || init.method === 'GET')) {
+            return new Response(JSON.stringify({ sessions: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/sessions') && init?.method === 'POST') {
+            return new Response(JSON.stringify({ session: { id: 'list-layout-conv', title: '新对话', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastChapterFile: null, messages: [] } }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/chat')) {
+            const encoder = new TextEncoder();
+            return new Response(new ReadableStream({
+              start(controller) {
+                const data = JSON.stringify({ delta: '1. first item\n2. second item\n' });
+                controller.enqueue(encoder.encode('event: text_delta\ndata: ' + data + '\n\nevent: done\ndata: {}\n\n'));
+                controller.close();
+              },
+            }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+          }
+          return originalFetch(input, init);
+        };
+      });
+      await page.evaluate(() => window.__core__.panel.open('ai-qa'));
+      await page.waitForFunction(() => window.__ai_qa_ready__);
+      await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'list');
+      await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
+      await page.waitForSelector('.ai-qa-message.assistant:not(.streaming)');
+      const listStylePosition = await page.evaluate(() => {
+        const message = document.querySelector('.ai-qa-message.assistant:not(.streaming)');
+        message.innerHTML = '<ol><li>first item</li><li>second item</li></ol>';
+        return getComputedStyle(message.querySelector('ol')).listStylePosition;
+      });
+      expect(listStylePosition).toBe('inside');
     } finally {
       await page.close();
     }

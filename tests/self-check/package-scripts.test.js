@@ -10,10 +10,42 @@ async function loadPackageJson() {
 }
 
 describe('package verification scripts', () => {
-  it('package should expose the doc-pi CLI binary', async () => {
+  it('package should expose a Bun-powered doc-pi CLI binary', async () => {
     const pkg = await loadPackageJson();
+    const cli = await readProjectFile('bin/doc-pi.js');
     expect(pkg.bin).toEqual({ 'doc-pi': './bin/doc-pi.js' });
     expect(pkg.type).toBe('module');
+    expect(cli.startsWith('#!/usr/bin/env bun')).toBe(true);
+    expect(cli).not.toContain('#!/usr/bin/env node');
+  });
+
+  it('package should be publishable to npm with runtime files only', async () => {
+    const pkg = await loadPackageJson();
+    expect(pkg.private).toBe(false);
+    expect(pkg.description).toBeTruthy();
+    expect(pkg.license).toBeTruthy();
+    expect(pkg.repository).toEqual({
+      type: 'git',
+      url: 'git+https://github.com/langgo/doc-pi.git',
+    });
+    expect(pkg.engines).toEqual({ bun: '>=1.3.0' });
+    expect(pkg.files).toEqual([
+      'bin/',
+      'src/server.js',
+      'src/runtime/config.js',
+      'src/core/server/*.js',
+      'src/core/public/*.js',
+      'src/core/public/*.css',
+      'src/core/public/template/*.ejs',
+      'src/plugins/*/index.js',
+      'src/plugins/*/client/*.js',
+      'src/plugins/*/client/*.css',
+      'src/plugins/*/server/*.js',
+      'examples/',
+      'README.md',
+      'README_CN.md',
+      'LICENSE',
+    ]);
   });
 
   it('test script should include all server unit test directories', async () => {
@@ -29,6 +61,20 @@ describe('package verification scripts', () => {
     expect(pkg.scripts['test:all']).toContain('bun run test:integration');
     expect(pkg.scripts['test:all']).toContain('bun run test:e2e');
     expect(pkg.scripts['test:all']).toContain('bun run test:self-check');
+  });
+
+  it('test:all server suites should avoid primary 3000-series ports', async () => {
+    const integrationFiles = [
+      'tests/integration/server.test.js',
+      'tests/integration/comments-api.test.js',
+      'tests/integration/ai-qa-api.test.js',
+    ];
+    for (const file of integrationFiles) {
+      const source = await readProjectFile(file);
+      expect(source).not.toMatch(/localhost:30\d{2}|PORT: '30\d{2}'/);
+      expect(source).toMatch(/localhost:130\d{2}/);
+      expect(source).toMatch(/PORT: '130\d{2}'/);
+    }
   });
 });
 

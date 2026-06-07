@@ -1,8 +1,38 @@
 {
   "name": "doc-pi",
   "version": "0.1.0",
-  "private": true,
+  "description": "Bun-based CLI document server for Markdown book projects.",
+  "private": false,
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langgo/doc-pi.git"
+  },
+  "homepage": "https://github.com/langgo/doc-pi#readme",
+  "bugs": {
+    "url": "https://github.com/langgo/doc-pi/issues"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "files": [
+    "bin/",
+    "src/server.js",
+    "src/runtime/config.js",
+    "src/core/server/*.js",
+    "src/core/public/*.js",
+    "src/core/public/*.css",
+    "src/core/public/template/*.ejs",
+    "src/plugins/*/index.js",
+    "src/plugins/*/client/*.js",
+    "src/plugins/*/client/*.css",
+    "src/plugins/*/server/*.js",
+    "examples/",
+    "README.md",
+    "README_CN.md",
+    "LICENSE"
+  ],
   "bin": {
     "doc-pi": "./bin/doc-pi.js"
   },

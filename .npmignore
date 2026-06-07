@@ -1,0 +1,7 @@
+tests/
+**/__tests__/**
+*.tgz
+bun.lock
+AGENTS.md
+src/README.md
+src/plugins/comments/comments-spec.md
