@@ -31,6 +31,13 @@
           <span class="doc-search-count" aria-label="0 个搜索结果" hidden>0</span>
         </div>
         <div class="doc-search-status" aria-live="polite"></div>
+        <button class="doc-search-help-toggle" type="button" aria-expanded="false" aria-controls="doc-search-help">?</button>
+        <div id="doc-search-help" class="doc-search-help" role="dialog" aria-label="搜索帮助" hidden>
+          <div>输入关键词搜索文档内容。</div>
+          <div>使用 <code>tag:&lt;name&gt;</code> 按标签过滤。</div>
+          <div>按 <kbd>/</kbd> 聚焦搜索，按 <kbd>↑/↓</kbd> 导航结果或最近搜索。</div>
+          <div>按 <kbd>Esc</kbd> 清空搜索或关闭帮助。</div>
+        </div>
         <div class="doc-search-filters" aria-label="搜索过滤条件"></div>
         <div class="doc-search-results"></div>
       </div>

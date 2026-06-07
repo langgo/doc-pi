@@ -4,9 +4,11 @@
   var clearButton = document.querySelector('.doc-search-clear');
   var countEl = document.querySelector('.doc-search-count');
   var statusEl = document.querySelector('.doc-search-status');
+  var helpToggle = document.querySelector('.doc-search-help-toggle');
+  var helpEl = document.querySelector('.doc-search-help');
   var filtersEl = document.querySelector('.doc-search-filters');
   var resultsEl = document.querySelector('.doc-search-results');
-  if (!inputWrap || !input || !clearButton || !countEl || !statusEl || !filtersEl || !resultsEl) return;
+  if (!inputWrap || !input || !clearButton || !countEl || !statusEl || !helpToggle || !helpEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
   var timer = null;
@@ -33,6 +35,11 @@
   function setLoading(isLoading) {
     inputWrap.classList.toggle('search-loading', Boolean(isLoading));
     inputWrap.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+  }
+
+  function setHelpVisible(visible) {
+    helpEl.hidden = !visible;
+    helpToggle.setAttribute('aria-expanded', visible ? 'true' : 'false');
   }
 
   function clearResults(message) {
@@ -323,6 +330,16 @@
       clearResults('搜索失败: ' + err.message);
     }
   }
+
+  helpToggle.addEventListener('click', function () {
+    setHelpVisible(helpEl.hidden);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && !helpEl.hidden) {
+      setHelpVisible(false);
+    }
+  });
 
   input.addEventListener('keydown', function (event) {
     if (event.key === 'ArrowDown') {
