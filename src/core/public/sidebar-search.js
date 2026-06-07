@@ -10,6 +10,7 @@
 
   var activeRequest = 0;
   var timer = null;
+  var recentStorageKey = 'doc-pi:recent-searches';
 
   function syncUrl(query) {
     var url = new URL(window.location.href);
@@ -116,6 +117,44 @@
 
   function searchResults() {
     return Array.prototype.slice.call(resultsEl.querySelectorAll('.doc-search-result'));
+  }
+
+  function readRecentSearches() {
+    try {
+      var value = JSON.parse(window.localStorage.getItem(recentStorageKey) || '[]');
+      return Array.isArray(value) ? value.filter(function (item) { return typeof item === 'string' && item.trim(); }).slice(0, 5) : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function writeRecentSearch(query) {
+    var trimmed = String(query || '').trim();
+    if (!trimmed) return;
+    var recent = readRecentSearches().filter(function (item) { return item.toLowerCase() !== trimmed.toLowerCase(); });
+    recent.unshift(trimmed);
+    try {
+      window.localStorage.setItem(recentStorageKey, JSON.stringify(recent.slice(0, 5)));
+    } catch (err) {}
+  }
+
+  function renderRecentSearches() {
+    if (String(input.value || '').trim()) return false;
+    var recent = readRecentSearches();
+    if (!recent.length) return false;
+    resultsEl.innerHTML = '';
+    statusEl.textContent = '最近搜索';
+    setResultCount(0, false);
+    setLoading(false);
+    for (var i = 0; i < recent.length; i += 1) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'doc-search-recent-item';
+      item.textContent = recent[i];
+      item.setAttribute('aria-label', '重新搜索 ' + recent[i]);
+      resultsEl.appendChild(item);
+    }
+    return true;
   }
 
   function hasTagFilter(query) {
@@ -237,6 +276,7 @@
         return;
       }
       renderResults(body.results || []);
+      writeRecentSearch(query);
     } catch (err) {
       if (requestId !== activeRequest) return;
       setLoading(false);
@@ -281,6 +321,16 @@
     }
   });
 
+  resultsEl.addEventListener('click', function (event) {
+    var recentItem = event.target.closest('.doc-search-recent-item');
+    if (!recentItem) return;
+    input.value = recentItem.textContent || '';
+    setClearVisible(input.value);
+    syncUrl(input.value);
+    runSearch(input.value);
+    input.focus();
+  });
+
   resultsEl.addEventListener('mouseover', function (event) {
     var result = event.target.closest('.doc-search-result');
     if (result) setSelectedResult(result);
@@ -302,6 +352,10 @@
     renderFilters(input.value);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.focus();
+  });
+
+  input.addEventListener('focus', function () {
+    renderRecentSearches();
   });
 
   input.addEventListener('input', function () {
