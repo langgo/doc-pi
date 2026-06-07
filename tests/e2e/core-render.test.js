@@ -621,6 +621,8 @@ describe('Core render E2E', () => {
       await page.waitForTimeout(150);
       expect(await page.$eval('#L18', el => el.classList.contains('line-target-active'))).toBe(false);
       expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(false);
+      expect(await page.$$('.doc-search-hit')).toHaveLength(0);
+      expect(await page.$eval('.markdown-content', el => el.textContent.includes('A blockquote for testing.'))).toBe(true);
     } finally {
       await page.close();
     }

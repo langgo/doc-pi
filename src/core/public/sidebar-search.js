@@ -275,15 +275,27 @@
     activeSearchController = null;
   }
 
-  function clearSearch() {
-    clearTimeout(timer);
-    abortActiveSearch();
+  function clearSearchPresentation() {
+    if (typeof window.docPiClearSearchHighlights === 'function') window.docPiClearSearchHighlights();
+    if (typeof window.docPiClearSearchLineTargets === 'function') window.docPiClearSearchLineTargets();
+    document.querySelectorAll('.doc-search-hit').forEach(function (mark) {
+      var parent = mark.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+      parent.normalize();
+    });
     document.querySelectorAll('.doc-search-line-target.line-target-active').forEach(function (target) {
       target.classList.remove('line-target-active');
     });
     if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('doc-search-line-target')) {
       document.activeElement.blur();
     }
+  }
+
+  function clearSearch() {
+    clearTimeout(timer);
+    abortActiveSearch();
+    clearSearchPresentation();
     input.value = '';
     setClearVisible('');
     renderFilters('');
@@ -544,14 +556,7 @@
 
   input.addEventListener('input', function () {
     var query = input.value;
-    if (!String(query || '').trim()) {
-      document.querySelectorAll('.doc-search-line-target.line-target-active').forEach(function (target) {
-        target.classList.remove('line-target-active');
-      });
-      if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('doc-search-line-target')) {
-        document.activeElement.blur();
-      }
-    }
+    if (!String(query || '').trim()) clearSearchPresentation();
     setClearVisible(query);
     syncUrl(query);
     clearTimeout(timer);
