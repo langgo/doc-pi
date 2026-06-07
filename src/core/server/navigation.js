@@ -6,24 +6,33 @@ import { escapeHtml } from './render.js';
 export async function getChapterFiles(rootDir = getContentRoot()) {
   const files = await readdir(rootDir);
   return files
-    .filter(f => /^\d{2}-.+\.md$/.test(f))
-    .sort();
+    .filter(f => f.endsWith('.md') && f !== 'AGENTS.md')
+    .sort((a, b) => {
+      if (a === 'README.md') return -1;
+      if (b === 'README.md') return 1;
+      return a.localeCompare(b);
+    });
 }
 
-export function getChapterNav(currentFile, chapterFiles) {
+export function getChapterNav(currentFile, chapterFiles, options = {}) {
   const idx = chapterFiles.indexOf(currentFile);
   if (idx === -1) return '';
   const prev = idx > 0 ? chapterFiles[idx - 1] : null;
   const next = idx < chapterFiles.length - 1 ? chapterFiles[idx + 1] : null;
   const parts = [];
+  const withLabels = options.withLabels === true;
   if (prev) {
-    parts.push(`<a href="/${prev}" class="nav-prev">← ${escapeHtml(prev.replace(/\.md$/, ''))}</a>`);
+    const prevName = escapeHtml(prev.replace(/\.md$/, ''));
+    parts.push(`<a href="/${prev}" class="nav-prev">← ${withLabels ? '<span>上一章</span><strong>' + prevName + '</strong>' : prevName}</a>`);
   }
   if (next) {
-    parts.push(`<a href="/${next}" class="nav-next">${escapeHtml(next.replace(/\.md$/, ''))} →</a>`);
+    const nextName = escapeHtml(next.replace(/\.md$/, ''));
+    parts.push(`<a href="/${next}" class="nav-next">${withLabels ? '<span>下一章</span><strong>' + nextName + '</strong>' : nextName} →</a>`);
   }
   if (!parts.length) return '';
-  return `<div class="chapter-nav">${parts.join('')}</div>`;
+  const className = options.position === 'bottom' ? 'chapter-nav chapter-nav-bottom' : 'chapter-nav';
+  const aria = options.position === 'bottom' ? ' aria-label="章节导航"' : '';
+  return `<nav class="${className}"${aria}>${parts.join('')}</nav>`;
 }
 
 export async function buildFileListToc(rootDir = getContentRoot(), currentFile = '') {
