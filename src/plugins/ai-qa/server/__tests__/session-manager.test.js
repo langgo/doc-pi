@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, mock } from 'bun:test';
 
 // Capture the mock session so tests can access it
 let capturedSession = null;
+let createdAuthStorages = [];
 
 // Default (success) factory
 function defaultFactory() {
@@ -23,6 +24,30 @@ function defaultFactory() {
   return { session: s, extensionsResult: null };
 }
 
+class MockAuthStorage {
+  static create = mock(async (dbPath) => {
+    const storage = new MockAuthStorage(dbPath);
+    createdAuthStorages.push(storage);
+    return storage;
+  });
+
+  constructor(dbPath) {
+    this.dbPath = dbPath;
+    this.close = mock(() => {});
+  }
+}
+
+class MockModelRegistry {
+  constructor(authStorage, modelsPath) {
+    this.authStorage = authStorage;
+    this.modelsPath = modelsPath;
+  }
+
+  getAvailable() {
+    return [{ provider: 'deepseek', id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' }];
+  }
+}
+
 // Mock the SDK before importing the module under test
 mock.module('@oh-my-pi/pi-coding-agent', () => {
   return {
@@ -30,6 +55,8 @@ mock.module('@oh-my-pi/pi-coding-agent', () => {
     SessionManager: {
       inMemory: mock(() => ({})),
     },
+    AuthStorage: MockAuthStorage,
+    ModelRegistry: MockModelRegistry,
   };
 });
 
@@ -44,16 +71,39 @@ import {
   historyStore,
 } from '../session-manager.js';
 import { createAgentSession } from '@oh-my-pi/pi-coding-agent';
+import { setRuntimeConfig } from '../../../../core/server/runtime-state.js';
 
 describe('session-manager', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetForTesting();
+    setRuntimeConfig({ rootDir: process.cwd(), aiQa: { agentDir: '/tmp/test-agent', historyDir: `/tmp/test-history-${Date.now()}-${Math.random()}` } });
     configure({ agentDir: '/tmp/test-agent' });
     capturedSession = null;
+    createdAuthStorages = [];
+    MockAuthStorage.create.mockClear();
     createAgentSession.mockImplementation(defaultFactory);
   });
 
   describe('askQuestion', () => {
+    it('passes auth storage and agent models.yml registry into runtime session creation', async () => {
+      const stream = await askQuestion('conv-model', {
+        question: 'test',
+        selectedText: '',
+        contextBefore: '',
+        contextAfter: '',
+        chapterFile: '01-概述.md',
+      });
+
+      const options = createAgentSession.mock.calls[0][0];
+      expect(options.model).toBeUndefined();
+      expect(options.authStorage).toBe(createdAuthStorages[0]);
+      expect(options.modelRegistry.authStorage).toBe(createdAuthStorages[0]);
+      expect(options.modelRegistry.modelsPath).toBe('/tmp/test-agent/models.yml');
+
+      capturedSession._emit({ type: 'agent_end' });
+      for await (const _ of stream) { /* drain */ }
+    });
+
     it('should create a runtime session on first question', async () => {
       const stream = await askQuestion('conv-1', {
         question: 'test',
@@ -273,6 +323,7 @@ describe('session-manager', () => {
 
       expect(disposed).toBe(true);
       expect(session.dispose).toHaveBeenCalled();
+      expect(createdAuthStorages[0].close).toHaveBeenCalled();
       expect(getRuntimeSessionCount()).toBe(0);
     });
 

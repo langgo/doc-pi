@@ -716,6 +716,36 @@
       var buffer = '';
       var thinkingBlock = null;
       var streamingMsg = null;
+      var currentEventType = '';
+      var currentData = '';
+
+      function handleSseEvent(eventType, dataStr) {
+        if (eventType === 'thinking_delta') {
+          try {
+            var thinkingData = JSON.parse(dataStr);
+            if (!thinkingBlock) thinkingBlock = addThinkingBlock();
+            appendToThinkingBlock(thinkingBlock, thinkingData.delta);
+          } catch (_) {}
+        } else if (eventType === 'text_delta') {
+          try {
+            var data = JSON.parse(dataStr);
+            if (!streamingMsg) streamingMsg = addStreamingMessage();
+            appendToMessage(streamingMsg, data.delta);
+          } catch (_) {}
+        } else if (eventType === 'error') {
+          try {
+            var errData = JSON.parse(dataStr);
+            var errorMessage = errData.error || '未知错误';
+            if (/不存在|过期|not found|expired/i.test(errorMessage)) forgetConversationId();
+            addMessage('error', '错误: ' + errorMessage);
+          } catch (_) {
+            addMessage('error', '请求出错');
+          }
+        } else if (eventType === 'done') {
+          if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
+          if (streamingMsg) finalizeMessage(streamingMsg);
+        }
+      }
 
       while (true) {
         var result = await reader.read();
@@ -725,39 +755,16 @@
         var lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
-        var eventType = '';
         for (var i = 0; i < lines.length; i++) {
           var line = lines[i];
-          if (line.startsWith('event: ')) {
-            eventType = line.slice(7).trim();
+          if (line === '') {
+            if (currentEventType) handleSseEvent(currentEventType, currentData);
+            currentEventType = '';
+            currentData = '';
+          } else if (line.startsWith('event: ')) {
+            currentEventType = line.slice(7).trim();
           } else if (line.startsWith('data: ')) {
-            var dataStr = line.slice(6);
-            if (eventType === 'thinking_delta') {
-              try {
-                var thinkingData = JSON.parse(dataStr);
-                if (!thinkingBlock) thinkingBlock = addThinkingBlock();
-                appendToThinkingBlock(thinkingBlock, thinkingData.delta);
-              } catch (_) {}
-            } else if (eventType === 'text_delta') {
-              try {
-                var data = JSON.parse(dataStr);
-                if (!streamingMsg) streamingMsg = addStreamingMessage();
-                appendToMessage(streamingMsg, data.delta);
-              } catch (_) {}
-            } else if (eventType === 'error') {
-              try {
-                var errData = JSON.parse(dataStr);
-                var errorMessage = errData.error || '未知错误';
-                if (/不存在|过期|not found|expired/i.test(errorMessage)) forgetConversationId();
-                addMessage('error', '错误: ' + errorMessage);
-              } catch (_) {
-                addMessage('error', '请求出错');
-              }
-            } else if (eventType === 'done') {
-              if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
-              if (streamingMsg) finalizeMessage(streamingMsg);
-            }
-            eventType = '';
+            currentData += (currentData ? '\n' : '') + line.slice(6);
           }
         }
       }

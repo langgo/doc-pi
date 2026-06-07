@@ -72,7 +72,7 @@ describe('resolveRuntimeConfig', () => {
         '--ai-agent-dir', 'cli-agent',
         '--ai-history-dir', 'cli-history',
         '--no-comments',
-        '--no-ai',
+        '--no-ai-qa',
       ],
       configObject: {
         root: 'ignored-root',
@@ -145,5 +145,36 @@ describe('resolveRuntimeConfig', () => {
     await mkdir(missingReadmeDir, { recursive: true });
     const configWithoutReadme = await resolveRuntimeConfig({ argv: ['--root', 'missing-readme'], cwd });
     expect(configWithoutReadme.siteTitle).toBe('Docs');
+  });
+
+  it('returns help usage without resolving content paths', async () => {
+    const config = await resolveRuntimeConfig({ argv: ['--help'], cwd: tmpRoot });
+    expect(config.help).toBe(true);
+    expect(config.usage).toContain('--no-ai-qa');
+  });
+
+  it('uses PORT from the environment and validates bad ports', async () => {
+    const originalPort = process.env.PORT;
+    try {
+      process.env.PORT = '6123';
+      const docsDir = path.join(tmpRoot, 'env-port');
+      await writeReadme(docsDir, '# Env Port\n');
+      const config = await resolveRuntimeConfig({ argv: ['--root', 'env-port'], cwd: tmpRoot });
+      expect(config.port).toBe(6123);
+
+      await expect(resolveRuntimeConfig({ argv: ['--root', 'env-port', '--port', '0'], cwd: tmpRoot })).rejects.toThrow('Invalid port');
+      await expect(resolveRuntimeConfig({ argv: ['--root', 'env-port', '--port', 'abc'], cwd: tmpRoot })).rejects.toThrow('Invalid port');
+    } finally {
+      if (originalPort === undefined) delete process.env.PORT;
+      else process.env.PORT = originalPort;
+    }
+  });
+
+  it('rejects invalid CLI options and unsupported config files', async () => {
+    await expect(resolveRuntimeConfig({ argv: ['--root'], cwd: tmpRoot })).rejects.toThrow('--root requires a value');
+    await expect(resolveRuntimeConfig({ argv: ['--unknown'], cwd: tmpRoot })).rejects.toThrow('Unknown option');
+
+    await writeFile(path.join(tmpRoot, 'doc-pi.config.txt'), 'root=docs\n', 'utf-8');
+    await expect(resolveRuntimeConfig({ argv: ['--config', 'doc-pi.config.txt'], cwd: tmpRoot })).rejects.toThrow('Unsupported config file extension');
   });
 });

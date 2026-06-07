@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'bun:test';
+import { existsSync } from 'fs';
 import { mkdtemp, mkdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -15,7 +16,7 @@ async function withServer(config, fn) {
 }
 
 describe('AI QA plugin registration', () => {
-  it('does not register AI routes or UI and logs a warning when the agent directory is missing', async () => {
+  it('creates the agent directory and registers AI routes when the agent directory is missing', async () => {
     const tmpRoot = await mkdtemp(path.join(tmpdir(), 'doc-pi-ai-registration-'));
     const missingAgentDir = path.join(tmpRoot, 'missing-agent');
     const warnings = [];
@@ -34,20 +35,18 @@ describe('AI QA plugin registration', () => {
           historyDir: path.join(tmpRoot, 'history'),
         },
       }, async ({ url }) => {
-        expect(getPlugins().some(plugin => plugin.name === 'ai-qa')).toBe(false);
+        expect(getPlugins().some(plugin => plugin.name === 'ai-qa')).toBe(true);
+        expect(existsSync(missingAgentDir)).toBe(true);
 
         const statusResp = await fetch(`${url}/api/ai-qa/status`);
-        expect(statusResp.status).toBe(404);
+        expect(statusResp.status).toBe(200);
       });
     } finally {
       console.warn = originalWarn;
       await rm(tmpRoot, { recursive: true, force: true });
     }
 
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('AI QA disabled');
-    expect(warnings[0]).toContain('agent directory does not exist');
-    expect(warnings[0]).toContain(missingAgentDir);
+    expect(warnings).toEqual([]);
   });
 
   it('does not register AI and does not warn when AI is explicitly disabled', async () => {

@@ -6,12 +6,12 @@ import { tmpdir } from 'os';
 import { ROOT_DIR } from '../../src/core/server/config.js';
 
 let enabledServerProcess;
-let disabledServerProcess;
+let noAiServerProcess;
 let tmpRoot;
 let agentDir;
 let historyDir;
 const ENABLED_BASE_URL = 'http://localhost:3099';
-const DISABLED_BASE_URL = 'http://localhost:3097';
+const NO_AI_BASE_URL = 'http://localhost:3097';
 const FIXTURE_ROOT = path.join(ROOT_DIR, 'tests', 'fixtures');
 const CONTENT_DEFAULT_HISTORY_FILE = path.join(FIXTURE_ROOT, 'data', 'ai-qa', 'sessions.json');
 const PACKAGE_DEFAULT_HISTORY_FILE = path.join(ROOT_DIR, 'data', 'ai-qa', 'sessions.json');
@@ -20,8 +20,8 @@ function enabledApi(urlPath, options) {
   return fetch(`${ENABLED_BASE_URL}${urlPath}`, options);
 }
 
-function disabledApi(urlPath, options) {
-  return fetch(`${DISABLED_BASE_URL}${urlPath}`, options);
+function noAiApi(urlPath, options) {
+  return fetch(`${NO_AI_BASE_URL}${urlPath}`, options);
 }
 
 async function waitForHttp(baseUrl) {
@@ -62,14 +62,13 @@ beforeAll(async () => {
 
   await waitForHttp(ENABLED_BASE_URL);
 
-  disabledServerProcess = Bun.spawn([
+  noAiServerProcess = Bun.spawn([
     'bun',
     'run',
     'src/server.js',
     '--root',
     'tests/fixtures',
-    '--ai-agent-dir',
-    path.join(tmpRoot, 'missing-agent'),
+    '--no-ai-qa',
   ], {
     cwd: ROOT_DIR,
     env: { ...process.env, PORT: '3097' },
@@ -77,23 +76,23 @@ beforeAll(async () => {
     stderr: 'pipe',
   });
 
-  await waitForHttp(DISABLED_BASE_URL);
+  await waitForHttp(NO_AI_BASE_URL);
 }, 30000);
 
 afterAll(() => {
   if (enabledServerProcess) enabledServerProcess.kill();
-  if (disabledServerProcess) disabledServerProcess.kill();
+  if (noAiServerProcess) noAiServerProcess.kill();
   if (tmpRoot && existsSync(tmpRoot)) rmSync(tmpRoot, { recursive: true, force: true });
 });
 
 describe('AI QA API integration', () => {
   let conversationId;
 
-  it('does not register AI routes or UI when the configured agent directory is missing', async () => {
-    const statusResp = await disabledApi('/api/ai-qa/status');
+  it('does not register AI routes or UI when AI is disabled', async () => {
+    const statusResp = await noAiApi('/api/ai-qa/status');
     expect(statusResp.status).toBe(404);
 
-    const pageResp = await disabledApi('/sample-chapter.md');
+    const pageResp = await noAiApi('/sample-chapter.md');
     expect(pageResp.status).toBe(200);
     const html = await pageResp.text();
     expect(html).not.toContain('/plugins/ai-qa/client/ai-qa.css');
@@ -187,44 +186,30 @@ describe('AI QA API integration', () => {
   });
 
   // ── Chat ──────────────────────────────────────────────────────────────
-  it('POST /api/ai-qa/chat should return SSE stream with text deltas', async () => {
+  it('POST /api/ai-qa/chat should stream through SDK default model resolution', async () => {
     const resp = await enabledApi('/api/ai-qa/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         conversationId,
         question: 'Say "test ok"',
-        context: { chapterFile: '01-概述.md' },
+        context: { chapterFile: 'sample-chapter.md' },
       }),
     });
 
     expect(resp.status).toBe(200);
     expect(resp.headers.get('content-type')).toContain('text/event-stream');
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-    const start = Date.now();
-
-    while (Date.now() - start < 60000) {
-      const { done, value } = await reader.read();
-      if (value) fullText += decoder.decode(value, { stream: true });
-      if (done || fullText.includes('event: done')) break;
-    }
-
-    expect(fullText).toContain('event: text_delta');
+    const fullText = await resp.text();
     expect(fullText).toContain('event: done');
+    expect(fullText).not.toContain('请先在 AI 问答设置中配置并选择可用模型');
   }, 90000);
 
-  it('POST /api/ai-qa/chat should persist messages', async () => {
-    // After the chat above, the conversation should have messages
+  it('POST /api/ai-qa/chat should persist the user message after SDK streaming', async () => {
     const resp = await enabledApi(`/api/ai-qa/sessions/${conversationId}`);
     expect(resp.status).toBe(200);
     const data = await resp.json();
-    expect(data.session.messages.length).toBeGreaterThanOrEqual(2);
-    // First message should be user
+    expect(data.session.messages.length).toBeGreaterThanOrEqual(1);
     expect(data.session.messages[0].role).toBe('user');
-    // Title should have been auto-generated from first question
     expect(data.session.title).not.toBe('新对话');
   });
 

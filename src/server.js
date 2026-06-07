@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { createServer } from 'http';
-import { readFile } from 'fs/promises';
+import { mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import boxen from 'boxen';
@@ -155,15 +155,12 @@ export async function startServer(runtimeConfig) {
     registerPlugin(commentsPlugin);
   }
   if (config.aiQa.enabled !== false) {
-    if (existsSync(config.aiQa.agentDir)) {
-      registerPlugin(createAiQaPlugin({
-        agentDir: config.aiQa.agentDir,
-        historyDir: config.aiQa.historyDir,
-        persistThinking: config.aiQa.persistThinking,
-      }));
-    } else {
-      console.warn(`[doc-pi] AI QA disabled: agent directory does not exist: ${config.aiQa.agentDir}`);
-    }
+    await mkdir(config.aiQa.agentDir, { recursive: true });
+    registerPlugin(createAiQaPlugin({
+      agentDir: config.aiQa.agentDir,
+      historyDir: config.aiQa.historyDir,
+      persistThinking: config.aiQa.persistThinking,
+    }));
   }
 
   const server = createDocPiServer(config);

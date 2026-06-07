@@ -28,7 +28,7 @@ doc-pi --root . --port 3000
 |`--ai-agent-dir <dir>`|OMP agent directory for AI Ask|`<root>/config/ai-qa/omp/agent`|
 |`--ai-history-dir <dir>`|AI Ask conversation history directory|`<root>/data/ai-qa`|
 |`--no-comments`|Disable comments|enabled|
-|`--no-ai`|Disable AI Ask without warning|enabled when agent dir exists|
+|`--no-ai-qa`|Disable AI QA / AI Ask|enabled|
 
 ## Config file
 
@@ -59,19 +59,21 @@ Path resolution rules:
 
 ## AI Ask
 
-AI Ask is registered only when it is enabled and the resolved `aiQa.agentDir` exists. If the directory is missing, `doc-pi` logs a warning and omits the AI button, panel tab, and API routes. Use `--no-ai` to disable it intentionally without a warning.
+AI Ask is registered whenever it is enabled. Startup creates the resolved `aiQa.agentDir` automatically so the OMP SDK can read model/auth configuration there. Use `--no-ai-qa` to disable AI QA / AI Ask intentionally.
 
-A generic example agent config lives at:
+Model/provider setup is file-based. Copy the generic example:
 
 ```text
 examples/ai-qa/omp/agent/models.yml.example
 ```
 
-Copy it into a content project such as:
+into a content project as:
 
 ```text
 <content-root>/config/ai-qa/omp/agent/models.yml
 ```
+
+`doc-pi` passes `<aiQa.agentDir>/models.yml` to the OMP SDK model registry. Built-in provider credentials, custom providers, custom models, and provider API keys should be configured through that OMP model configuration path.
 
 Conversation history is runtime data and is written to `aiQa.historyDir`; it is never written to the `doc-pi` package root unless explicitly configured there.
 

@@ -15,7 +15,8 @@
 //   - Concurrency limit (5 active runtime sessions)
 //   - History replay for persistent conversations
 
-import { createAgentSession, SessionManager } from '@oh-my-pi/pi-coding-agent';
+import path from 'path';
+import { createAgentSession, SessionManager, AuthStorage, ModelRegistry } from '@oh-my-pi/pi-coding-agent';
 import { getContentRoot } from '../../../core/server/runtime-state.js';
 import { getChapterFiles } from '../../../core/server/navigation.js';
 import * as historyStore from './history-store.js';
@@ -23,7 +24,7 @@ import * as historyStore from './history-store.js';
 const MAX_SESSIONS = 5;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-// Map<conversationId, { session, unsubscribe, lastActivity, timer }>
+// Map<conversationId, { session, unsubscribe, lastActivity, timer, authStorage }>
 const runtimeSessions = new Map();
 
 let sdkAvailable = true;
@@ -35,6 +36,7 @@ export function resetForTesting() {
   for (const [, entry] of runtimeSessions) {
     if (entry.timer) clearTimeout(entry.timer);
     if (entry.unsubscribe) entry.unsubscribe();
+    if (entry.authStorage && typeof entry.authStorage.close === 'function') entry.authStorage.close();
   }
   runtimeSessions.clear();
   sdkAvailable = true;
@@ -115,6 +117,9 @@ async function createRuntimeSession(conversationId, historyMessages) {
 
   const chapterFiles = await getChapterFiles();
 
+  const authStorage = await AuthStorage.create(path.join(agentDir, 'agent.db'));
+  const modelRegistry = new ModelRegistry(authStorage, path.join(agentDir, 'models.yml'));
+
   let agentResult;
   try {
     agentResult = await createAgentSession({
@@ -125,8 +130,11 @@ async function createRuntimeSession(conversationId, historyMessages) {
       disableExtensionDiscovery: true,
       cwd: getContentRoot(),
       agentDir,
+      authStorage,
+      modelRegistry,
     });
   } catch (err) {
+    authStorage.close();
     sdkAvailable = false;
     throw new Error(`AI 问答暂不可用: ${err.message}`);
   }
@@ -157,6 +165,7 @@ async function createRuntimeSession(conversationId, historyMessages) {
     unsubscribe,
     lastActivity: Date.now(),
     timer: null,
+    authStorage,
   });
 
   resetIdleTimer(conversationId);
@@ -192,6 +201,11 @@ async function ensureRuntimeSession(conversationId) {
 /**
  * Dispose a runtime session and clean up resources.
  */
+export async function disposeAllRuntimeSessions() {
+  const ids = [...runtimeSessions.keys()];
+  await Promise.all(ids.map(id => disposeRuntimeSession(id)));
+}
+
 export async function disposeRuntimeSession(conversationId) {
   const entry = runtimeSessions.get(conversationId);
   if (!entry) return false;
@@ -203,6 +217,10 @@ export async function disposeRuntimeSession(conversationId) {
     await entry.session.dispose();
   } catch {
     // Ignore dispose errors
+  }
+
+  if (entry.authStorage && typeof entry.authStorage.close === 'function') {
+    entry.authStorage.close();
   }
 
   runtimeSessions.delete(conversationId);

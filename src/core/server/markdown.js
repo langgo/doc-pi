@@ -126,6 +126,15 @@ export async function processMarkdown(filePath) {
 
   // Process markdown
   let html = marked(mdContent);
+  html = html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+    .replace(/<([a-z][\w:-]*)([^>]*)>/gi, (match, tag, attrs) => {
+      const safeAttrs = attrs
+        .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+        .replace(/\s+href\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '')
+        .replace(/\s+src\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '');
+      return '<' + tag + safeAttrs + '>';
+    });
 
   // Add id attributes to headings for TOC anchor navigation
   html = html.replace(/<(h[1-4])>(.*?)<\/\1>/g, (match, tag, text) => {

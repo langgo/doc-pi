@@ -1,77 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { chromium } from 'playwright';
-import { ROOT_DIR } from '../../src/core/server/config.js';
+import { startE2EServer } from './helpers/server.js';
 
 let browser;
-let serverProcess;
-const BASE_URL = 'http://localhost:3100';
+let server;
+let baseUrl;
 
 beforeAll(async () => {
-  serverProcess = Bun.spawn(['bun', 'run', 'src/server.js'], {
-    cwd: ROOT_DIR,
-    env: { ...process.env, PORT: '3100' },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-
-  for (let i = 0; i < 50; i++) {
-    try {
-      const res = await fetch(`${BASE_URL}/`);
-      if (res.ok) break;
-    } catch {}
-    await new Promise(r => setTimeout(r, 300));
-  }
-
+  server = await startE2EServer({ ai: true });
+  baseUrl = server.baseUrl;
   browser = await chromium.launch({ headless: true });
 }, 30000);
 
 afterAll(async () => {
   if (browser) await browser.close();
-  if (serverProcess) serverProcess.kill();
+  if (server) await server.stop();
 });
 
 describe('AI QA E2E', () => {
-  it('core article annotation should support ranges crossing inline nodes without empty inline shells', async () => {
-    const page = await browser.newPage();
-    try {
-      await page.goto(`${BASE_URL}/01-概述.md`);
-      await page.waitForFunction(() => window.__core__);
-      const result = await page.evaluate(() => {
-        const content = document.querySelector('.markdown-content');
-        const p = document.createElement('p');
-        p.innerHTML = '<strong>关键</strong>：<code>remove</code> 和 <code>add</code> 是<strong>原子操作</strong>——后续内容';
-        content.prepend(p);
-        const ok = window.__core__.article.annotateText({
-          selectedText: 'remove 和 add 是原子操作',
-          contextBefore: '关键：',
-          contextAfter: '——后续内容',
-          chapterFile: window.__core__.state.currentFile,
-        }, {
-          id: 'cross-node-test',
-          className: 'test-cross-node-annotation',
-        });
-        const mark = document.querySelector('.test-cross-node-annotation[data-core-annotation-id="cross-node-test"]');
-        return {
-          ok,
-          count: document.querySelectorAll('.test-cross-node-annotation[data-core-annotation-id="cross-node-test"]').length,
-          text: mark ? mark.textContent.replace(/\s+/g, ' ').trim() : '',
-          emptyInlineCount: p.querySelectorAll('code:empty,strong:empty,em:empty,a:empty').length,
-        };
-      });
-
-      expect(result.ok).toBe(true);
-      expect(result.count).toBe(1);
-      expect(result.text).toBe('remove 和 add 是原子操作');
-      expect(result.emptyInlineCount).toBe(0);
-    } finally {
-      await page.close();
-    }
-  }, 15000);
-
   it('should not annotate article for panel-origin AI context', async () => {
     const page = await browser.newPage();
     try {
-      await page.goto(`${BASE_URL}/01-概述.md`);
+      await page.goto(`${baseUrl}/sample-chapter.md`);
       await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
       const text = await page.evaluate(() => {
         const content = document.querySelector('.markdown-content');
@@ -106,7 +56,7 @@ describe('AI QA E2E', () => {
     const page = await browser.newPage();
     await page.addInitScript(() => {
       localStorage.setItem('ai-qa-conversationId', 'preopen-history-conv');
-      const selectedText = 'ElasticSearch（简称 ES）是一个基于 Apache Lucene 构建的开源分布式搜索与分析引擎。';
+      const selectedText = 'This is a test paragraph with some bold text and inline code.';
       const originalFetch = window.fetch;
       window.fetch = async (input, init) => {
         const url = String(input);
@@ -117,7 +67,7 @@ describe('AI QA E2E', () => {
               title: '预加载历史会话',
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
-              lastChapterFile: '01-概述.md',
+              lastChapterFile: 'sample-chapter.md',
               messageCount: 1,
             }],
           }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -129,7 +79,7 @@ describe('AI QA E2E', () => {
               title: '预加载历史会话',
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
-              lastChapterFile: '01-概述.md',
+              lastChapterFile: 'sample-chapter.md',
               messages: [{
                 id: 'preopen-user-history-1',
                 role: 'user',
@@ -137,8 +87,8 @@ describe('AI QA E2E', () => {
                 context: {
                   selectedText,
                   contextBefore: '',
-                  contextAfter: '它由 Shay',
-                  chapterFile: '01-概述.md',
+                  contextAfter: '',
+                  chapterFile: 'sample-chapter.md',
                 },
                 createdAt: new Date().toISOString(),
               }],
@@ -149,7 +99,7 @@ describe('AI QA E2E', () => {
       };
     });
     try {
-      await page.goto(`${BASE_URL}/01-概述.md`);
+      await page.goto(`${baseUrl}/sample-chapter.md`);
       await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
       await page.waitForSelector('.ai-qa-context-highlight[data-core-annotation-id="ai-qa-history-preopen-user-history-1"]');
       const panelOpen = await page.$eval('.core-panel', el => el.classList.contains('open')).catch(() => false);
@@ -165,7 +115,7 @@ describe('AI QA E2E', () => {
       localStorage.setItem('ai-qa-conversationId', 'history-conv');
     });
     try {
-      await page.goto(`${BASE_URL}/01-概述.md`);
+      await page.goto(`${baseUrl}/sample-chapter.md`);
       await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
       const selectedText = await page.evaluate(() => {
         const content = document.querySelector('.markdown-content');
@@ -188,7 +138,7 @@ describe('AI QA E2E', () => {
                 title: '历史会话',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                lastChapterFile: '01-概述.md',
+                lastChapterFile: 'sample-chapter.md',
                 messageCount: 1,
               }],
             }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -200,7 +150,7 @@ describe('AI QA E2E', () => {
                 title: '历史会话',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                lastChapterFile: '01-概述.md',
+                lastChapterFile: 'sample-chapter.md',
                 messages: [{
                   id: 'user-history-1',
                   role: 'user',
@@ -209,7 +159,7 @@ describe('AI QA E2E', () => {
                     selectedText: text,
                     contextBefore: '',
                     contextAfter: '',
-                    chapterFile: '01-概述.md',
+                    chapterFile: 'sample-chapter.md',
                   },
                   createdAt: new Date().toISOString(),
                 }],
@@ -231,140 +181,7 @@ describe('AI QA E2E', () => {
       const displayedChapter = await page.$eval('.ai-qa-message-context .message-context-chapter', el => el.textContent.trim());
       expect(highlight.text).toBe(selectedText);
       expect(highlight.role).toBe('button');
-      expect(displayedChapter).toBe('01-概述.md');
-    } finally {
-      await page.close();
-    }
-  }, 15000);
-
-  it('core selection actions should be idempotent by id', async () => {
-    const page = await browser.newPage();
-    try {
-      await page.goto(`${BASE_URL}/01-概述.md`);
-      await page.waitForFunction(() => window.__core__);
-      await page.evaluate(() => {
-        window.__core__.selection.addAction({ id: 'dup-action', label: 'Duplicate', handler: function () {} });
-        window.__core__.selection.addAction({ id: 'dup-action', label: 'Duplicate Updated', handler: function () {} });
-        window.__core__.floating.addButton({ id: 'dup-floating', icon: 'A', label: 'Duplicate Floating', onClick: function () {} });
-        window.__core__.floating.addButton({ id: 'dup-floating', icon: 'B', label: 'Duplicate Floating Updated', onClick: function () {} });
-        window.__core__.panel.addTab({ id: 'dup-tab', label: 'Duplicate Tab', render: function (container) { container.textContent = 'old'; } });
-        window.__core__.panel.addTab({ id: 'dup-tab', label: 'Duplicate Tab Updated', render: function (container) { container.textContent = 'new'; } });
-        window.__core__.panel.open('dup-tab');
-        window.__core__.panel.close();
-
-        const content = document.querySelector('.markdown-content');
-        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
-        let node;
-        while ((node = walker.nextNode())) {
-          if (node.textContent.trim().length > 24) break;
-        }
-        const selectedText = node.textContent.trim().slice(0, 12);
-        const idx = node.textContent.indexOf(selectedText);
-        const range = document.createRange();
-        range.setStart(node, idx);
-        range.setEnd(node, idx + selectedText.length);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 200, clientY: 200 }));
-      });
-      await page.waitForSelector('.selection-popup.visible');
-
-      const count = await page.$$eval('.selection-popup [data-selection-action-id="dup-action"]', els => els.length);
-      const label = await page.$eval('.selection-popup [data-selection-action-id="dup-action"]', el => el.textContent.trim());
-      const floatingCount = await page.$$eval('#dup-floating', els => els.length);
-      const floatingLabel = await page.$eval('#dup-floating', el => el.title);
-      const tabCount = await page.$$eval('.core-panel-tab[data-tab-id="dup-tab"]', els => els.length);
-      const tabLabel = await page.$eval('.core-panel-tab[data-tab-id="dup-tab"]', el => el.textContent.trim());
-      const paneText = await page.$eval('.core-panel-pane[data-tab-id="dup-tab"]', el => el.textContent.trim());
-
-      expect(count).toBe(1);
-      expect(label).toContain('Duplicate Updated');
-      expect(floatingCount).toBe(1);
-      expect(floatingLabel).toBe('Duplicate Floating Updated');
-      expect(tabCount).toBe(1);
-      expect(tabLabel).toContain('Duplicate Tab Updated');
-      expect(paneText).toBe('new');
-    } finally {
-      await page.close();
-    }
-  }, 15000);
-
-  it('persists core panel size and position across refresh', async () => {
-    const page = await browser.newPage();
-    try {
-      await page.setViewportSize({ width: 1000, height: 700 });
-      await page.goto(`${BASE_URL}/01-概述.md`);
-      await page.waitForFunction(() => window.__core__);
-      await page.evaluate(() => {
-        localStorage.removeItem('core-panel-state');
-        window.__core__.panel.addTab({
-          id: 'persist-panel',
-          label: 'Persist',
-          render: function (container) { container.textContent = 'persist'; },
-        });
-        window.__core__.panel.open('persist-panel');
-      });
-      await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="persist-panel"].active');
-      const actionOrder = await page.$$eval('.core-panel-tabs > button', els => els.slice(-2).map(el => el.className));
-      expect(actionOrder).toEqual(['core-panel-reset', 'core-panel-close']);
-
-      const tabBar = await page.$('.core-panel-tabs');
-      const tabBox = await tabBar.boundingBox();
-      await page.mouse.move(tabBox.x + tabBox.width / 2, tabBox.y + tabBox.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(tabBox.x + tabBox.width / 2 - 120, tabBox.y + tabBox.height / 2 - 60);
-      await page.mouse.up();
-
-      const eastHandle = await page.$('.core-panel-resize-e');
-      const eastBox = await eastHandle.boundingBox();
-      await page.mouse.move(eastBox.x + eastBox.width / 2, eastBox.y + eastBox.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(eastBox.x + eastBox.width / 2 + 70, eastBox.y + eastBox.height / 2);
-      await page.mouse.up();
-
-      const before = await page.$eval('.core-panel.open', el => {
-        const r = el.getBoundingClientRect();
-        return { left: r.left, top: r.top, width: r.width, height: r.height };
-      });
-      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('core-panel-state') || 'null'));
-      expect(saved).toBeObject();
-      expect(Math.abs(saved.left - before.left)).toBeLessThanOrEqual(2);
-      expect(Math.abs(saved.top - before.top)).toBeLessThanOrEqual(2);
-      expect(Math.abs(saved.width - before.width)).toBeLessThanOrEqual(2);
-
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.waitForFunction(() => window.__core__);
-      await page.evaluate(() => {
-        window.__core__.panel.addTab({
-          id: 'persist-panel',
-          label: 'Persist',
-          render: function (container) { container.textContent = 'persist'; },
-        });
-        window.__core__.panel.open('persist-panel');
-      });
-      await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="persist-panel"].active');
-      const after = await page.$eval('.core-panel.open', el => {
-        const r = el.getBoundingClientRect();
-        return { left: r.left, top: r.top, width: r.width, height: r.height };
-      });
-
-      expect(Math.abs(after.left - before.left)).toBeLessThanOrEqual(2);
-      expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(2);
-      expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(2);
-      expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(2);
-
-      await page.click('.core-panel-reset');
-      const reset = await page.$eval('.core-panel.open', el => {
-        const r = el.getBoundingClientRect();
-        return { right: r.right, bottom: r.bottom, width: r.width, height: r.height };
-      });
-      const storedAfterReset = await page.evaluate(() => localStorage.getItem('core-panel-state'));
-      expect(storedAfterReset).toBeNull();
-      expect(Math.abs(reset.width - 320)).toBeLessThanOrEqual(2);
-      expect(Math.abs(reset.height - 600)).toBeLessThanOrEqual(2);
-      expect(Math.abs((1000 - reset.right) - 24)).toBeLessThanOrEqual(2);
-      expect(Math.abs((700 - reset.bottom) - 24)).toBeLessThanOrEqual(2);
+      expect(displayedChapter).toBe('sample-chapter.md');
     } finally {
       await page.close();
     }
@@ -373,7 +190,7 @@ describe('AI QA E2E', () => {
   it('sends decoded chapter file from core selection context', async () => {
     const page = await browser.newPage();
     try {
-      await page.goto(`${BASE_URL}/01-概述.md`);
+      await page.goto(`${baseUrl}/sample-chapter.md`);
       await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
       await page.evaluate(() => {
         const originalFetch = window.fetch;
@@ -464,7 +281,7 @@ describe('AI QA E2E', () => {
       const chapterFile = await page.evaluate(() => window.__aiQaChatBody.context.chapterFile);
       const conversationId = await page.evaluate(() => window.__aiQaChatBody.conversationId);
       const retainedHighlightCount = await page.$$eval('.ai-qa-context-highlight', els => els.length);
-      expect(chapterFile).toBe('01-概述.md');
+      expect(chapterFile).toBe('sample-chapter.md');
       expect(conversationId).toBe('selection-conv');
       expect(retainedHighlightCount).toBe(1);
 
@@ -478,6 +295,220 @@ describe('AI QA E2E', () => {
     }
   }, 15000);
 
+  it('renders thinking stream, markdown answer, and SSE error messages', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`${baseUrl}/sample-chapter.md`);
+      await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
+      await page.evaluate(() => {
+        const originalFetch = window.fetch;
+        window.__aiQaChatCount = 0;
+        window.fetch = async (input, init) => {
+          const url = String(input);
+          if (url === '/api/ai-qa/sessions' && (!init || init.method === 'GET')) {
+            return new Response(JSON.stringify({ sessions: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/sessions') && init?.method === 'POST') {
+            return new Response(JSON.stringify({
+              session: {
+                id: 'stream-conv',
+                title: '新对话',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                lastChapterFile: null,
+                messages: [],
+              },
+            }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/chat')) {
+            window.__aiQaChatCount += 1;
+            const encoder = new TextEncoder();
+            const payload = window.__aiQaChatCount === 1
+              ? 'event: thinking_delta\ndata: {"delta":"plan"}\n\nevent: text_delta\ndata: {"delta":"**ok**"}\n\nevent: done\ndata: {}\n\n'
+              : 'event: error\ndata: {"error":"boom"}\n\n';
+            const stream = new ReadableStream({
+              start(controller) {
+                controller.enqueue(encoder.encode(payload));
+                controller.close();
+              },
+            });
+            return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+          }
+          return originalFetch(input, init);
+        };
+      });
+
+      await page.evaluate(() => window.__core__.panel.open('ai-qa'));
+      await page.waitForFunction(() => window.__ai_qa_ready__);
+      await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="ai-qa"].active');
+      await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'first');
+      await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
+      await page.waitForFunction(() => document.querySelector('.ai-qa-thinking pre')?.textContent.trim() === 'plan');
+      await page.waitForFunction(() => document.querySelector('.ai-qa-message.assistant:not(.streaming)')?.innerHTML.includes('ok'));
+      const thinkingText = await page.$eval('.ai-qa-thinking pre', el => el.textContent.trim());
+      const answerHtml = await page.$eval('.ai-qa-message.assistant:not(.streaming)', el => el.innerHTML);
+      expect(thinkingText).toBe('plan');
+      expect(answerHtml).toContain('ok');
+
+      await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'second');
+      await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
+      await page.waitForSelector('.ai-qa-message.error:has-text("错误: boom")');
+      expect(await page.evaluate(() => window.__aiQaChatCount)).toBe(2);
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
+  it('renames, switches, and deletes AI QA conversations from the session bar', async () => {
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch;
+      const sessions = [
+        { id: 'conv-a', title: 'Alpha', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastChapterFile: 'sample-chapter.md', messageCount: 1 },
+        { id: 'conv-b', title: 'Beta', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastChapterFile: 'sample-chapter.md', messageCount: 1 },
+      ];
+      const conversations = {
+        'conv-a': { ...sessions[0], messages: [{ id: 'a-user', role: 'user', content: 'Alpha question', context: null, createdAt: new Date().toISOString() }] },
+        'conv-b': { ...sessions[1], messages: [{ id: 'b-user', role: 'user', content: 'Beta question', context: null, createdAt: new Date().toISOString() }] },
+      };
+      window.__aiQaRequests = [];
+      window.fetch = async (input, init) => {
+        const url = String(input);
+        if (url === '/api/ai-qa/sessions' && (!init || init.method === 'GET')) {
+          return new Response(JSON.stringify({ sessions }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        const match = url.match(/^\/api\/ai-qa\/sessions\/([^/]+)$/);
+        if (match && (!init || init.method === 'GET')) {
+          return new Response(JSON.stringify({ session: conversations[decodeURIComponent(match[1])] || null }), { status: conversations[decodeURIComponent(match[1])] ? 200 : 404, headers: { 'Content-Type': 'application/json' } });
+        }
+        if (match && init?.method === 'PATCH') {
+          const id = decodeURIComponent(match[1]);
+          const body = JSON.parse(init.body);
+          window.__aiQaRequests.push({ method: 'PATCH', id, body });
+          conversations[id].title = body.title;
+          sessions.find(session => session.id === id).title = body.title;
+          return new Response(JSON.stringify({ session: conversations[id] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        if (match && init?.method === 'DELETE') {
+          const id = decodeURIComponent(match[1]);
+          window.__aiQaRequests.push({ method: 'DELETE', id });
+          const index = sessions.findIndex(session => session.id === id);
+          if (index >= 0) sessions.splice(index, 1);
+          delete conversations[id];
+          return new Response(JSON.stringify({ deleted: id }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return originalFetch(input, init);
+      };
+    });
+
+    try {
+      await page.goto(`${baseUrl}/sample-chapter.md`);
+      await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
+      await page.evaluate(() => window.__core__.panel.open('ai-qa'));
+      await page.waitForFunction(() => window.__ai_qa_ready__);
+      await page.waitForSelector('.ai-qa-message.user:has-text("Alpha question")');
+
+      await page.click('.ai-qa-session-select');
+      await page.waitForSelector('.ai-qa-session-dropdown .ai-qa-session-item[data-id="conv-b"]');
+      await page.click('.ai-qa-session-dropdown .ai-qa-session-item[data-id="conv-b"]');
+      await page.waitForSelector('.ai-qa-message.user:has-text("Beta question")');
+      expect(await page.evaluate(() => localStorage.getItem('ai-qa-conversationId'))).toBe('conv-b');
+
+      await page.click('.ai-qa-btn-rename');
+      await page.waitForSelector('.core-panel-confirm-input');
+      await page.fill('.core-panel-confirm-input', 'Beta Renamed');
+      await page.click('.core-panel-confirm-actions button.primary');
+      await page.waitForFunction(() => window.__aiQaRequests.some(req => req.method === 'PATCH' && req.body.title === 'Beta Renamed'));
+      const renamedRequest = await page.evaluate(() => window.__aiQaRequests.find(req => req.method === 'PATCH'));
+      expect(renamedRequest).toEqual({ method: 'PATCH', id: 'conv-b', body: { title: 'Beta Renamed' } });
+
+      await page.click('.ai-qa-btn-delete');
+      await page.waitForSelector('.core-panel-confirm-overlay .core-panel-confirm-dialog');
+      await page.click('.core-panel-confirm-actions button.danger');
+      await page.waitForFunction(() => window.__aiQaRequests.some(req => req.method === 'DELETE' && req.id === 'conv-b'));
+      await page.waitForFunction(() => document.querySelector('.ai-qa-session-select')?.textContent.includes('Alpha'));
+      await page.click('.ai-qa-session-select');
+      await page.waitForSelector('.ai-qa-session-dropdown .ai-qa-session-item[data-id="conv-a"]');
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
+  it('shows request failure when chat HTTP response is not ok', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`${baseUrl}/sample-chapter.md`);
+      await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
+      await page.evaluate(() => {
+        const originalFetch = window.fetch;
+        window.fetch = async (input, init) => {
+          const url = String(input);
+          if (url === '/api/ai-qa/sessions' && (!init || init.method === 'GET')) {
+            return new Response(JSON.stringify({ sessions: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/sessions') && init?.method === 'POST') {
+            return new Response(JSON.stringify({ session: { id: 'http-fail-conv', title: '新对话', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastChapterFile: null, messages: [] } }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/chat')) {
+            return new Response('upstream unavailable', { status: 503 });
+          }
+          return originalFetch(input, init);
+        };
+      });
+      await page.evaluate(() => window.__core__.panel.open('ai-qa'));
+      await page.waitForFunction(() => window.__ai_qa_ready__);
+      await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'fail please');
+      await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
+      await page.waitForSelector('.ai-qa-message.error:has-text("请求失败")');
+      const errorText = await page.$eval('.ai-qa-message.error', el => el.textContent);
+      expect(errorText).toContain('upstream unavailable');
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
+  it('continues streaming after malformed SSE JSON and split chunks', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`${baseUrl}/sample-chapter.md`);
+      await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
+      await page.evaluate(() => {
+        const originalFetch = window.fetch;
+        window.fetch = async (input, init) => {
+          const url = String(input);
+          if (url === '/api/ai-qa/sessions' && (!init || init.method === 'GET')) {
+            return new Response(JSON.stringify({ sessions: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/sessions') && init?.method === 'POST') {
+            return new Response(JSON.stringify({ session: { id: 'split-conv', title: '新对话', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), lastChapterFile: null, messages: [] } }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (url.includes('/api/ai-qa/chat')) {
+            const encoder = new TextEncoder();
+            const chunks = [
+              'event: text_delta\ndata: {bad json}\n\nevent: text_delta\ndata: {"delta":"he',
+              'llo"}\n\nevent: done\ndata: {}\n\n',
+            ];
+            return new Response(new ReadableStream({
+              start(controller) {
+                chunks.forEach(chunk => controller.enqueue(encoder.encode(chunk)));
+                controller.close();
+              },
+            }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+          }
+          return originalFetch(input, init);
+        };
+      });
+      await page.evaluate(() => window.__core__.panel.open('ai-qa'));
+      await page.waitForFunction(() => window.__ai_qa_ready__);
+      await page.fill('.core-panel-pane[data-tab-id="ai-qa"] textarea', 'split');
+      await page.click('.core-panel-pane[data-tab-id="ai-qa"] .btn-send');
+      await page.waitForSelector('.ai-qa-message.assistant:not(.streaming):has-text("hello")');
+      expect(await page.$eval('.ai-qa-message.assistant:not(.streaming)', el => el.textContent.trim())).toBe('hello');
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
   it('clears stale restored conversation when sessions list does not contain it', async () => {
     const page = await browser.newPage();
     await page.addInitScript(() => {
@@ -485,7 +516,7 @@ describe('AI QA E2E', () => {
     });
 
     try {
-      await page.goto(`${BASE_URL}/01-概述.md`);
+      await page.goto(`${baseUrl}/sample-chapter.md`);
       await page.waitForFunction(() => window.__core__ && window.__ai_qa__);
       await page.evaluate(() => {
         const originalFetch = window.fetch;
@@ -540,7 +571,7 @@ describe('AI QA E2E', () => {
       });
 
       // Open panel to trigger initSessions
-      await page.click('#ai-qa-toggle');
+      await page.evaluate(() => window.__core__.panel.open('ai-qa'));
 
       // Wait for initSessions to complete
       await page.waitForFunction(() => window.__ai_qa_ready__);

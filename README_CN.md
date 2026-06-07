@@ -28,7 +28,7 @@ doc-pi --root . --port 3000
 |`--ai-agent-dir <dir>`|AI 问答使用的 OMP agent 目录|`<root>/config/ai-qa/omp/agent`|
 |`--ai-history-dir <dir>`|AI 问答会话历史目录|`<root>/data/ai-qa`|
 |`--no-comments`|关闭评论功能|默认开启|
-|`--no-ai`|关闭 AI 问答，且不输出缺失 agent 的警告|agent 目录存在时默认开启|
+|`--no-ai-qa`|关闭 AI QA / AI 问答|默认开启|
 
 ## 配置文件
 
@@ -59,19 +59,21 @@ export default {
 
 ## AI 问答
 
-只有当 AI 问答开启，且解析后的 `aiQa.agentDir` 存在时，`doc-pi` 才会注册 AI 问答插件。如果目录不存在，`doc-pi` 会输出警告，并且不会注册 AI 按钮、面板页签和 API 路由。使用 `--no-ai` 可以主动关闭 AI 问答，并抑制该警告。
+只要 AI 问答开启，`doc-pi` 就会注册 AI 问答插件。启动时会自动创建解析后的 `aiQa.agentDir`，以便 OMP SDK 从该目录读取模型和认证配置。使用 `--no-ai-qa` 可以主动关闭 AI QA / AI 问答。
 
-通用示例 agent 配置位于：
+模型和 Provider 改为文件配置。先复制通用示例：
 
 ```text
 examples/ai-qa/omp/agent/models.yml.example
 ```
 
-可以将它复制到内容项目中，例如：
+到内容项目中：
 
 ```text
 <content-root>/config/ai-qa/omp/agent/models.yml
 ```
+
+`doc-pi` 会把 `<aiQa.agentDir>/models.yml` 传给 OMP SDK model registry。内置 Provider 凭证、自定义 Provider、自定义模型和 Provider API Key 都应通过 OMP 模型配置文件维护。
 
 会话历史属于运行时数据，会写入 `aiQa.historyDir`；除非显式配置，否则不会写入 `doc-pi` 包目录。
 

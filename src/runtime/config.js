@@ -26,7 +26,7 @@ Options:
   --ai-agent-dir <dir>       AI QA agent directory, resolved from root
   --ai-history-dir <dir>     AI QA history directory, resolved from root
   --no-comments              Disable comments plugin
-  --no-ai                    Disable AI QA plugin
+  --no-ai-qa                 Disable AI QA plugin
   --help                     Show this help
 `;
 
@@ -70,7 +70,7 @@ function parseArgv(argv = []) {
       case '--no-comments':
         flags.commentsEnabled = false;
         break;
-      case '--no-ai':
+      case '--no-ai-qa':
         flags.aiEnabled = false;
         break;
       case '--help':

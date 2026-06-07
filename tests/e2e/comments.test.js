@@ -1,148 +1,49 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { chromium } from 'playwright';
-import path from 'path';
-import { ROOT_DIR } from '../../src/core/server/config.js';
+import { startE2EServer } from './helpers/server.js';
+import { gotoFixture, selectFirstParagraphText } from './helpers/browser.js';
 
 let browser;
 let page;
-let serverProcess;
-const BASE_URL = 'http://localhost:3097';
+let server;
+let BASE_URL;
+const PRIMARY_CHAPTER = '/sample-chapter.md';
+const PRIMARY_CHAPTER_FILE = 'sample-chapter.md';
+const SECONDARY_CHAPTER_FILE = 'secondary-chapter.md';
 
 beforeAll(async () => {
-  // Start server
-  serverProcess = Bun.spawn(['bun', 'run', 'src/server.js'], {
-    cwd: ROOT_DIR,
-    env: { ...process.env, PORT: '3097' },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-
-  for (let i = 0; i < 50; i++) {
-    try {
-      const res = await fetch(`${BASE_URL}/`);
-      if (res.ok) break;
-    } catch {}
-    await new Promise(r => setTimeout(r, 300));
-  }
-
+  server = await startE2EServer({ ai: false });
+  BASE_URL = server.baseUrl;
   browser = await chromium.launch({ headless: true });
   page = await browser.newPage();
 }, 30000);
 
 afterAll(async () => {
   if (browser) await browser.close();
-  if (serverProcess) serverProcess.kill();
+  if (server) await server.stop();
 });
 
 async function goto(pathname = '') {
-  await page.goto(`${BASE_URL}${pathname}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => document.title.includes('ElasticSearch'));
+  await gotoFixture(page, BASE_URL, pathname);
 }
 
 describe('Comments E2E', () => {
-  it('should load the homepage', async () => {
-    await goto();
-    const title = await page.title();
-    expect(title).toContain('ElasticSearch');
-  });
-
-  it('should load a chapter page with sidebar', async () => {
-    await goto('/01-概述.md');
-    // Sidebar should be visible
-    const sidebar = await page.$('.sidebar');
-    expect(sidebar).not.toBeNull();
-
-    // Content should be rendered
-    const content = await page.$('.markdown-content');
-    expect(content).not.toBeNull();
-  });
-
-  it('should have comment panel toggle button', async () => {
-    await goto('/01-概述.md');
+  it('has comment panel toggle button', async () => {
+    await goto(PRIMARY_CHAPTER);
     // The comment toggle button should exist
     const toggleBtn = await page.$('#comments-toggle');
     expect(toggleBtn).not.toBeNull();
   });
 
-  it('should show comment panel when toggle clicked', async () => {
-    await goto('/01-概述.md');
-    const toggleBtn = await page.$('#comments-toggle');
-    if (toggleBtn) {
-      await toggleBtn.click();
-      // Core panel should open with the comments tab active.
-      await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active', { timeout: 3000 });
-      const rect = await page.$eval('.core-panel.open', el => {
-        const r = el.getBoundingClientRect();
-        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
-      });
-      expect(rect.right).toBeGreaterThan(900);
-      expect(rect.bottom).toBeGreaterThan(500);
-      expect(rect.left).toBeGreaterThanOrEqual(0);
-      expect(rect.top).toBeGreaterThanOrEqual(0);
-    }
-  });
-
-  it('should keep open core panel visible when viewport shrinks', async () => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    try {
-      await goto('/01-概述.md');
-      await page.click('#comments-toggle');
-      await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active', { timeout: 3000 });
-      await page.setViewportSize({ width: 280, height: 520 });
-      const rect = await page.$eval('.core-panel.open', el => {
-        const r = el.getBoundingClientRect();
-        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
-      });
-      expect(rect.left).toBeGreaterThanOrEqual(8);
-      expect(rect.top).toBeGreaterThanOrEqual(8);
-      expect(rect.right).toBeLessThanOrEqual(272);
-      expect(rect.bottom).toBeLessThanOrEqual(512);
-    } finally {
-      await page.setViewportSize({ width: 1280, height: 720 });
-    }
-  });
-
-  it('should keep core panel fully visible on narrow screens', async () => {
-    await page.setViewportSize({ width: 280, height: 520 });
-    try {
-      await goto('/01-概述.md');
-      await page.click('#comments-toggle');
-      await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active', { timeout: 3000 });
-      const rect = await page.$eval('.core-panel.open', el => {
-        const r = el.getBoundingClientRect();
-        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
-      });
-      expect(rect.left).toBeGreaterThanOrEqual(8);
-      expect(rect.top).toBeGreaterThanOrEqual(8);
-      expect(rect.right).toBeLessThanOrEqual(272);
-      expect(rect.bottom).toBeLessThanOrEqual(512);
-    } finally {
-      await page.setViewportSize({ width: 1280, height: 720 });
-    }
-  });
-
-  it('should show comment form on text selection', async () => {
-    await goto('/01-概述.md');
-
-    // Select some text in the content area
-    const contentEl = await page.$('.markdown-content p');
-    if (contentEl) {
-      // Triple-click to select paragraph
-      await contentEl.click({ clickCount: 3 });
-
-      // Wait a bit for the popup to appear
-      await page.waitForTimeout(500);
-
-      // The comment popup should be visible
-      const popup = await page.$('.selection-popup.visible');
-      // Popup may or may not appear depending on selection behavior
-      // Just verify the page is still functional
-      expect(await page.title()).toContain('ElasticSearch');
-    }
+  it('opens comments panel when toggle clicked', async () => {
+    await goto(PRIMARY_CHAPTER);
+    await page.click('#comments-toggle');
+    await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active', { timeout: 3000 });
+    expect(await page.$('.comment-panel-list')).not.toBeNull();
   });
 
   it('comment submission should preserve context supplied by core selection', async () => {
-    await goto('/01-概述.md');
+    await goto(PRIMARY_CHAPTER);
     const initialBadge = await page.$eval('#comments-toggle .floating-action-badge', el => Number(el.textContent.trim() || 0)).catch(() => 0);
     const captured = await page.evaluate(async () => {
       localStorage.setItem('comment-author', 'E2E');
@@ -159,12 +60,9 @@ describe('Comments E2E', () => {
         return originalFetch(input, init);
       };
 
-      const content = document.querySelector('.markdown-content');
+      const content = document.querySelector('.markdown-content p');
       const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
-      let node;
-      while ((node = walker.nextNode())) {
-        if (node.textContent.trim().length > 24) break;
-      }
+      const node = walker.nextNode();
       const selectedText = node.textContent.trim().slice(0, 12);
       const idx = node.textContent.indexOf(selectedText);
       const range = document.createRange();
@@ -194,35 +92,13 @@ describe('Comments E2E', () => {
     expect(Number(badgeText)).toBe(initialBadge + 1);
   }, 15000);
 
-  it('floating action returns to bottom-right after panel resize and close', async () => {
-    await goto('/01-概述.md');
-    await page.click('#comments-toggle');
-    await page.waitForSelector('.core-panel.open');
-
-    const handle = await page.$('.core-panel-resize-n');
-    const box = await handle.boundingBox();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y - 80);
-    await page.mouse.up();
-
-    await page.click('.core-panel-close');
-    await page.waitForFunction(() => !document.querySelector('.core-panel')?.classList.contains('open'));
-
-    const bottom = await page.$eval('.floating-actions', el => getComputedStyle(el).bottom);
-    expect(bottom).toBe('20px');
-  }, 15000);
-
   it('comment annotation click should open comments tab and focus the card', async () => {
-    await goto('/01-概述.md');
+    await goto(PRIMARY_CHAPTER);
 
     const context = await page.evaluate(() => {
-      const content = document.querySelector('.markdown-content');
+      const content = document.querySelector('.markdown-content p');
       const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
-      let node;
-      while ((node = walker.nextNode())) {
-        if (node.textContent.trim().length > 24) break;
-      }
+      const node = walker.nextNode();
       const text = node.textContent;
       const selectedText = text.trim().slice(0, 16);
       const idx = text.indexOf(selectedText);
@@ -233,7 +109,7 @@ describe('Comments E2E', () => {
       };
     });
 
-    const createRes = await fetch(`${BASE_URL}/api/comments/01-%E6%A6%82%E8%BF%B0.md`, {
+    const createRes = await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -257,20 +133,17 @@ describe('Comments E2E', () => {
       const activeCard = await page.$eval(`.comment-card[data-comment-id="${created.id}"]`, el => el.classList.contains('active'));
       expect(activeCard).toBe(true);
     } finally {
-      await fetch(`${BASE_URL}/api/comments/01-%E6%A6%82%E8%BF%B0.md?id=${created.id}`, { method: 'DELETE' });
+      await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}?id=${created.id}`, { method: 'DELETE' });
     }
   }, 15000);
 
   it('comment quote click should not fallback to plugin highlight when core locator misses', async () => {
-    await goto('/01-概述.md');
+    await goto(PRIMARY_CHAPTER);
 
     const context = await page.evaluate(() => {
-      const content = document.querySelector('.markdown-content');
+      const content = document.querySelector('.markdown-content p');
       const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
-      let node;
-      while ((node = walker.nextNode())) {
-        if (node.textContent.trim().length > 24) break;
-      }
+      const node = walker.nextNode();
       const text = node.textContent;
       const selectedText = text.trim().slice(0, 16);
       const idx = text.indexOf(selectedText);
@@ -281,7 +154,7 @@ describe('Comments E2E', () => {
       };
     });
 
-    const createRes = await fetch(`${BASE_URL}/api/comments/01-%E6%A6%82%E8%BF%B0.md`, {
+    const createRes = await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -304,7 +177,10 @@ describe('Comments E2E', () => {
         window.__core__.panel.open('comments');
       });
       await page.click(`.comment-card[data-comment-id="${created.id}"] .card-quote`);
-      await page.waitForTimeout(100);
+      await page.waitForFunction((id) => {
+        const highlight = document.querySelector(`.comment-highlight[data-comment-id="${id}"]`);
+        return highlight && !highlight.classList.contains('active');
+      }, created.id);
 
       const pluginHighlightActivated = await page.$eval(
         `.comment-highlight[data-comment-id="${created.id}"]`,
@@ -312,22 +188,12 @@ describe('Comments E2E', () => {
       );
       expect(pluginHighlightActivated).toBe(false);
     } finally {
-      await fetch(`${BASE_URL}/api/comments/01-%E6%A6%82%E8%BF%B0.md?id=${created.id}`, { method: 'DELETE' });
+      await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}?id=${created.id}`, { method: 'DELETE' });
     }
   }, 15000);
 
-  it('should render mermaid diagrams', async () => {
-    // Navigate to a chapter that likely has mermaid diagrams
-    await goto('/02-核心概念.md');
-
-    // Check for mermaid containers
-    const mermaidContainers = await page.$$('.mermaid-container');
-    // At least verify the page loaded
-    expect(await page.title()).toContain('ElasticSearch');
-  }, 15000);
-
-  it('should show chapter management bar in comments panel', async () => {
-    await goto('/01-概述.md');
+  it('shows chapter management bar in comments panel', async () => {
+    await goto(PRIMARY_CHAPTER);
     // Open comments panel
     await page.click('#comments-toggle');
     await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active', { timeout: 3000 });
@@ -340,7 +206,7 @@ describe('Comments E2E', () => {
   }, 15000);
 
   it('chapter select should show current chapter', async () => {
-    await goto('/01-概述.md');
+    await goto(PRIMARY_CHAPTER);
     await page.click('#comments-toggle');
     await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active', { timeout: 3000 });
     // Wait for async chapter bar population
@@ -349,12 +215,153 @@ describe('Comments E2E', () => {
       return sel && sel.value !== '';
     }, { timeout: 5000 });
     const selectedValue = await page.$eval('.comment-chapter-select', el => el.value);
-    expect(selectedValue).toBe('01-概述.md');
+    expect(selectedValue).toBe(PRIMARY_CHAPTER_FILE);
+  }, 15000);
+
+  it('comment form should validate empty content, save author, render card, and delete with confirmation', async () => {
+    await goto(PRIMARY_CHAPTER);
+    const initialBadge = await page.$eval('#comments-toggle .floating-action-badge', el => Number(el.textContent.trim() || 0)).catch(() => 0);
+    const selectedText = await selectFirstParagraphText(page, 14);
+    await page.evaluate((text) => window.__comments__.handleSelection({
+      selectedText: text,
+      contextBefore: '',
+      contextAfter: '',
+      chapterFile: window.__core__.state.currentFile,
+      source: 'article',
+    }), selectedText);
+
+    await page.waitForSelector('#comment-form-overlay.visible .comment-form');
+    await page.click('#comment-submit');
+    const validationError = await page.$eval('#comment-form-error.visible', el => el.textContent.trim());
+    expect(validationError).toBe('请输入评论内容');
+
+    await page.fill('#comment-author-input', 'FlowTester');
+    await page.fill('#comment-textarea', 'full flow comment');
+    await page.click('#comment-submit');
+    await page.waitForSelector('#comment-form-overlay', { state: 'detached' });
+    await page.click('#comments-toggle');
+    await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active');
+    await page.waitForSelector('.comment-card:has-text("full flow comment")');
+
+    const card = await page.$eval('.comment-card:has-text("full flow comment")', el => ({
+      author: el.querySelector('.card-author')?.textContent.trim(),
+      quote: el.querySelector('.card-quote')?.textContent.trim(),
+      id: el.dataset.commentId,
+    }));
+    expect(card.author).toBe('FlowTester');
+    expect(card.quote).toBe(selectedText);
+    expect(await page.evaluate(() => localStorage.getItem('comment-author'))).toBe('FlowTester');
+    expect(await page.$eval('#comments-toggle .floating-action-badge', el => Number(el.textContent.trim() || 0))).toBe(initialBadge + 1);
+
+    await page.click(`.comment-card[data-comment-id="${card.id}"] [data-action="delete"]`);
+    await page.waitForSelector('.core-panel-confirm-overlay .core-panel-confirm-dialog');
+    const dialogTitle = await page.$eval('.core-panel-confirm-title', el => el.textContent.trim());
+    expect(dialogTitle).toContain('确认删除');
+    await page.click('.core-panel-confirm-actions button.danger');
+    await page.waitForFunction((id) => !document.querySelector(`.comment-card[data-comment-id="${id}"]`), card.id);
+    expect(await page.$eval('#comments-toggle .floating-action-badge', el => Number(el.textContent.trim() || 0))).toBe(initialBadge);
+  }, 15000);
+
+  it('shows delete error when comment deletion fails', async () => {
+    await goto(PRIMARY_CHAPTER);
+    const createRes = await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selectedText: 'This is a test', comment: 'delete failure comment', author: 'E2E' }),
+    });
+    const created = await createRes.json();
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => window.__core__ && window.__comments__);
+      await page.evaluate(() => {
+        const originalFetch = window.fetch;
+        window.fetch = async (input, init) => {
+          if (String(input).startsWith('/api/comments/') && init?.method === 'DELETE') {
+            return new Response(JSON.stringify({ error: 'delete failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+          }
+          return originalFetch(input, init);
+        };
+        window.__core__.panel.open('comments');
+      });
+      await page.waitForSelector(`.comment-card[data-comment-id="${created.id}"]`);
+      await page.click(`.comment-card[data-comment-id="${created.id}"] [data-action="delete"]`);
+      await page.waitForSelector('.core-panel-confirm-overlay .core-panel-confirm-dialog');
+      await page.click('.core-panel-confirm-actions button.danger');
+      await page.waitForSelector('.core-panel-notice.error:has-text("删除失败")');
+      expect(await page.$(`.comment-card[data-comment-id="${created.id}"]`)).not.toBeNull();
+    } finally {
+      await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}?id=${created.id}`, { method: 'DELETE' });
+    }
+  }, 15000);
+
+  it('shows a save error when comment creation fails', async () => {
+    await goto(PRIMARY_CHAPTER);
+    await page.evaluate(async () => {
+      const originalFetch = window.fetch;
+      window.fetch = async (input, init) => {
+        if (String(input).startsWith('/api/comments/') && init?.method === 'POST') {
+          return new Response(JSON.stringify({ error: 'save failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        }
+        return originalFetch(input, init);
+      };
+      const paragraph = document.querySelector('.markdown-content p');
+      const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+      const node = walker.nextNode();
+      const selectedText = node.textContent.trim().slice(0, 12);
+      const text = node.textContent;
+      const idx = text.indexOf(selectedText);
+      const range = document.createRange();
+      range.setStart(node, idx);
+      range.setEnd(node, idx + selectedText.length);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      await window.__comments__.handleSelection({ selectedText, contextBefore: '', contextAfter: '', chapterFile: window.__core__.state.currentFile, source: 'article' });
+    });
+    await page.waitForSelector('#comment-form-overlay.visible .comment-form');
+    await page.fill('#comment-textarea', 'will fail');
+    await page.click('#comment-submit');
+    const errorText = await page.$eval('#comment-form-error.visible', el => el.textContent.trim());
+    expect(errorText).toContain('保存失败');
+  }, 15000);
+
+  it('escapes comment content when rendering cards', async () => {
+    await goto(PRIMARY_CHAPTER);
+    const createRes = await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        selectedText: 'This is a test',
+        comment: '<img src=x onerror="window.__commentXss=1">safe',
+        author: '<b>Bad</b>',
+      }),
+    });
+    const created = await createRes.json();
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => window.__core__ && window.__comments__);
+      await page.evaluate(() => window.__core__.panel.open('comments'));
+      await page.waitForSelector(`.comment-card[data-comment-id="${created.id}"]`);
+      const rendered = await page.$eval(`.comment-card[data-comment-id="${created.id}"]`, el => ({
+        html: el.innerHTML,
+        author: el.querySelector('.card-author')?.textContent,
+        body: el.querySelector('.card-body')?.textContent,
+        hasImage: !!el.querySelector('img'),
+        xss: window.__commentXss || 0,
+      }));
+      expect(rendered.author).toBe('<b>Bad</b>');
+      expect(rendered.body).toContain('<img src=x');
+      expect(rendered.hasImage).toBe(false);
+      expect(rendered.xss).toBe(0);
+      expect(rendered.html).toContain('&lt;img');
+    } finally {
+      await fetch(`${BASE_URL}/api/comments/${PRIMARY_CHAPTER_FILE}?id=${created.id}`, { method: 'DELETE' });
+    }
   }, 15000);
 
   it('chapter select should navigate to another chapter', async () => {
-    // First create a comment on 02-核心概念.md so it appears in the summary
-    const createRes = await fetch(`${BASE_URL}/api/comments/02-%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5.md`, {
+    // First create a comment on another chapter so it appears in the summary
+    const createRes = await fetch(`${BASE_URL}/api/comments/${SECONDARY_CHAPTER_FILE}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -366,7 +373,7 @@ describe('Comments E2E', () => {
     const created = await createRes.json();
 
     try {
-      await goto('/01-概述.md');
+      await goto(PRIMARY_CHAPTER);
       await page.click('#comments-toggle');
       await page.waitForSelector('.core-panel.open .core-panel-pane[data-tab-id="comments"].active', { timeout: 3000 });
       // Wait for async chapter bar population
@@ -376,13 +383,13 @@ describe('Comments E2E', () => {
       }, { timeout: 5000 });
 
       // Select the other chapter
-      await page.selectOption('.comment-chapter-select', '02-核心概念.md');
+      await page.selectOption('.comment-chapter-select', SECONDARY_CHAPTER_FILE);
       // Should navigate to that chapter
-      await page.waitForURL('**/02-%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5.md#comments', { timeout: 5000 });
+      await page.waitForURL('**/secondary-chapter.md#comments', { timeout: 5000 });
       const url = page.url();
-      expect(url).toContain('02-%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5.md');
+      expect(url).toContain('secondary-chapter.md');
     } finally {
-      await fetch(`${BASE_URL}/api/comments/02-%E6%A0%B8%E5%BF%83%E6%A6%82%E5%BF%B5.md?id=${created.id}`, { method: 'DELETE' });
+      await fetch(`${BASE_URL}/api/comments/${SECONDARY_CHAPTER_FILE}?id=${created.id}`, { method: 'DELETE' });
     }
   }, 15000);
 });
