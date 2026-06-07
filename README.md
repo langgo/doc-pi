@@ -9,28 +9,31 @@
 
 ## Install
 
-### Install from npm
+`doc-pi` is distributed as a Bun-powered CLI. No matter which installer you use, Bun must be installed and available on `PATH` because the executable starts with `#!/usr/bin/env bun`.
 
-After the package is published to npm:
+### From npm registry
+
+Use this after `doc-pi` has been published to npm:
 
 ```bash
 npm install -g doc-pi
-```
-
-Then run:
-
-```bash
 doc-pi --root ./docs
 ```
 
-The CLI entry uses `#!/usr/bin/env bun`, so users installing through npm still need Bun available on `PATH`.
+Equivalent Bun command for the npm registry package:
 
-### Install directly from GitHub with Bun
+```bash
+bun add -g doc-pi
+doc-pi --root ./docs
+```
 
-Install the latest `main` branch:
+### From GitHub repository
+
+Install the latest `main` branch directly from GitHub:
 
 ```bash
 bun add -g github:langgo/doc-pi
+doc-pi --root ./docs
 ```
 
 Install a specific branch or commit:
@@ -40,21 +43,48 @@ bun add -g github:langgo/doc-pi#stream-markdown-ai-qa
 bun add -g github:langgo/doc-pi#<commit-sha>
 ```
 
-### Link a local checkout
+If you prefer npm syntax for the same GitHub source:
 
-For local development:
+```bash
+npm install -g github:langgo/doc-pi
+npm install -g github:langgo/doc-pi#<branch-or-commit>
+```
+
+### From a local checkout
+
+For local development, link the repository checkout globally:
 
 ```bash
 git clone https://github.com/langgo/doc-pi.git
 cd doc-pi
 bun install
 bun link
+doc-pi --root ./docs
 ```
 
-Then use the linked command from any content project:
+Equivalent npm local install from the checkout:
 
 ```bash
-doc-pi --root .
+git clone https://github.com/langgo/doc-pi.git
+cd doc-pi
+bun install
+npm install -g .
+doc-pi --root ./docs
+```
+
+### Install command matrix
+
+|Source|Bun|npm|
+|---|---|---|
+|Published package|`bun add -g doc-pi`|`npm install -g doc-pi`|
+|GitHub `main`|`bun add -g github:langgo/doc-pi`|`npm install -g github:langgo/doc-pi`|
+|GitHub branch/commit|`bun add -g github:langgo/doc-pi#<ref>`|`npm install -g github:langgo/doc-pi#<ref>`|
+|Local checkout|`bun link` from repo root|`npm install -g .` from repo root|
+
+All installation methods expose the same command:
+
+```bash
+doc-pi --root ./docs
 ```
 
 ## Usage

@@ -9,28 +9,31 @@
 
 ## 安装
 
-### 通过 npm 安装
+`doc-pi` 是一个基于 Bun 运行的 CLI。无论使用哪种安装方式，都需要先安装 Bun，并确保 `bun` 在 `PATH` 中，因为可执行入口使用 `#!/usr/bin/env bun`。
 
-包发布到 npm 后，可以全局安装：
+### 从 npm registry 安装
+
+包发布到 npm 后，可以使用：
 
 ```bash
 npm install -g doc-pi
-```
-
-然后运行：
-
-```bash
 doc-pi --root ./docs
 ```
 
-CLI 入口使用 `#!/usr/bin/env bun`，所以即使通过 npm 安装，用户机器上也需要先安装 Bun，并确保 `bun` 在 `PATH` 中。
+使用 Bun 安装同一个 npm registry 包：
 
-### 通过 Bun 从 GitHub 直接安装
+```bash
+bun add -g doc-pi
+doc-pi --root ./docs
+```
 
-安装最新 `main` 分支：
+### 从 GitHub 仓库安装
+
+直接安装 GitHub 最新 `main` 分支：
 
 ```bash
 bun add -g github:langgo/doc-pi
+doc-pi --root ./docs
 ```
 
 安装指定分支或提交：
@@ -40,21 +43,48 @@ bun add -g github:langgo/doc-pi#stream-markdown-ai-qa
 bun add -g github:langgo/doc-pi#<commit-sha>
 ```
 
-### 本地 checkout link
+如果希望使用 npm 语法安装同一个 GitHub 源：
 
-本地开发时：
+```bash
+npm install -g github:langgo/doc-pi
+npm install -g github:langgo/doc-pi#<branch-or-commit>
+```
+
+### 从本地 checkout 安装
+
+本地开发时，可以把仓库 checkout link 到全局：
 
 ```bash
 git clone https://github.com/langgo/doc-pi.git
 cd doc-pi
 bun install
 bun link
+doc-pi --root ./docs
 ```
 
-之后可以在任意内容项目中使用：
+等价的 npm 本地安装方式：
 
 ```bash
-doc-pi --root .
+git clone https://github.com/langgo/doc-pi.git
+cd doc-pi
+bun install
+npm install -g .
+doc-pi --root ./docs
+```
+
+### 安装命令对照
+
+|来源|Bun|npm|
+|---|---|---|
+|已发布 npm 包|`bun add -g doc-pi`|`npm install -g doc-pi`|
+|GitHub `main`|`bun add -g github:langgo/doc-pi`|`npm install -g github:langgo/doc-pi`|
+|GitHub 分支/提交|`bun add -g github:langgo/doc-pi#<ref>`|`npm install -g github:langgo/doc-pi#<ref>`|
+|本地 checkout|在仓库根目录执行 `bun link`|在仓库根目录执行 `npm install -g .`|
+
+所有安装方式最终都会暴露同一个命令：
+
+```bash
+doc-pi --root ./docs
 ```
 
 ## 使用方式
