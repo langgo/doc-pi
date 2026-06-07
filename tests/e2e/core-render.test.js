@@ -28,6 +28,24 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows a sidebar search result count badge', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => document.querySelector('.doc-search-count')?.textContent === '2');
+      expect(await page.$eval('.doc-search-count', el => el.getAttribute('aria-label'))).toBe('2 个搜索结果');
+      await page.fill('.doc-search-input', 'not-present-anywhere');
+      await page.waitForFunction(() => document.querySelector('.doc-search-count')?.textContent === '0');
+      expect(await page.$eval('.doc-search-count', el => el.getAttribute('aria-label'))).toBe('0 个搜索结果');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-count')?.hidden === true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('restores sidebar search from the URL query parameter', async () => {
     const page = await browser.newPage();
     try {

@@ -1,9 +1,10 @@
 (function () {
   var input = document.querySelector('.doc-search-input');
+  var countEl = document.querySelector('.doc-search-count');
   var statusEl = document.querySelector('.doc-search-status');
   var filtersEl = document.querySelector('.doc-search-filters');
   var resultsEl = document.querySelector('.doc-search-results');
-  if (!input || !statusEl || !filtersEl || !resultsEl) return;
+  if (!input || !countEl || !statusEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
   var timer = null;
@@ -16,9 +17,16 @@
     window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
   }
 
+  function setResultCount(count, visible) {
+    countEl.textContent = String(count);
+    countEl.setAttribute('aria-label', count + ' 个搜索结果');
+    countEl.hidden = !visible;
+  }
+
   function clearResults(message) {
     resultsEl.innerHTML = '';
     statusEl.textContent = message || '';
+    setResultCount(0, false);
   }
 
   function escapeHtml(value) {
@@ -118,9 +126,11 @@
     resultsEl.innerHTML = '';
     if (!results.length) {
       statusEl.textContent = '无匹配结果';
+      setResultCount(0, true);
       return;
     }
     statusEl.textContent = results.length + ' 个结果';
+    setResultCount(results.length, true);
     for (var i = 0; i < results.length; i += 1) {
       var result = results[i];
       var link = document.createElement('a');
@@ -156,6 +166,7 @@
       return;
     }
     statusEl.textContent = '搜索中…';
+    setResultCount(0, false);
     try {
       var res = await fetch('/api/search?q=' + encodeURIComponent(query));
       var body = await res.json();
