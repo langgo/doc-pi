@@ -21,7 +21,7 @@ describe('Markdown and Mermaid E2E', () => {
     const page = await browser.newPage();
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
-      expect(await page.$eval('.markdown-content h1', el => el.textContent.trim())).toBe('Rich Markdown Fixture');
+      expect(await page.$eval('.markdown-content h1', el => el.childNodes[0].textContent.trim())).toBe('Rich Markdown Fixture');
       expect(await page.$eval('.markdown-content pre code', el => el.textContent.trim())).toContain('const answer = 42;');
       expect(await page.$eval('.markdown-content table tbody tr td:first-child', el => el.textContent.trim())).toBe('alpha');
       expect(await page.$eval('.markdown-content blockquote', el => el.textContent.trim())).toBe('Quoted text for rendering.');

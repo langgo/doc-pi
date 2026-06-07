@@ -314,6 +314,31 @@ body {
   line-height: 1.25;
 }
 
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  scroll-margin-top: 1rem;
+}
+
+.heading-anchor {
+  margin-left: 0.375rem;
+  color: #8c959f;
+  text-decoration: none;
+  opacity: 0;
+  font-weight: 400;
+}
+
+.markdown-content h1:hover .heading-anchor,
+.markdown-content h2:hover .heading-anchor,
+.markdown-content h3:hover .heading-anchor,
+.markdown-content h4:hover .heading-anchor,
+.heading-anchor:focus {
+  opacity: 1;
+}
+
+.heading-anchor:hover { color: #0969da; }
+
 .markdown-content p { margin-bottom: 16px; }
 
 .markdown-content ul, .markdown-content ol {

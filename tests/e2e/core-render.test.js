@@ -49,6 +49,17 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('renders copyable heading anchor links', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      const href = await page.$eval('.markdown-content h1 .heading-anchor', el => el.getAttribute('href'));
+      expect(href).toBe('#sample-chapter-for-testing');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('marks the current sidebar chapter as active', async () => {
     const page = await browser.newPage();
     try {
@@ -66,7 +77,7 @@ describe('Core render E2E', () => {
       await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
       expect(await page.$('.sidebar')).not.toBeNull();
       expect(await page.$('.markdown-content')).not.toBeNull();
-      const h1 = await page.$eval('.markdown-content h1', el => el.textContent.trim());
+      const h1 = await page.$eval('.markdown-content h1', el => el.childNodes[0].textContent.trim());
       const paragraph = await page.$eval('.markdown-content p', el => el.textContent.trim());
       expect(h1).toBe('Sample Chapter for Testing');
       expect(paragraph).toContain('This is a test paragraph');
