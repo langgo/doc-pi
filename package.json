@@ -1,7 +1,7 @@
 {
   "name": "doc-pi",
   "version": "0.1.0",
-  "description": "Bun-based CLI document server for Markdown book projects.",
+  "description": "CLI document server for Markdown book projects.",
   "private": false,
   "type": "module",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "url": "https://github.com/langgo/doc-pi/issues"
   },
   "engines": {
-    "bun": ">=1.3.0"
+    "node": ">=20.0.0"
   },
   "files": [
     "bin/",
@@ -37,8 +37,8 @@
     "doc-pi": "./bin/doc-pi.js"
   },
   "scripts": {
-    "start": "bun run bin/doc-pi.js",
-    "dev": "bun --watch run bin/doc-pi.js",
+    "start": "node bin/doc-pi.js",
+    "dev": "node --watch bin/doc-pi.js",
     "test": "bun test src/core/server/__tests__/ src/plugins/comments/server/__tests__/ src/plugins/ai-qa/server/__tests__/",
     "test:integration": "bun test tests/integration/",
     "test:e2e": "bun test tests/e2e/",

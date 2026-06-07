@@ -1,15 +1,16 @@
 # doc-pi
 
-`doc-pi` 是一个基于 Bun 的 Markdown 图书文档服务器 CLI。它可以渲染指定内容目录，并提供章节导航、渲染/源码视图切换、Mermaid 和 KaTeX 支持、评论，以及可选的基于 OMP agent 配置的 AI 问答。
+`doc-pi` 是一个 Markdown 图书文档服务器 CLI。它可以渲染指定内容目录，并提供章节导航、渲染/源码视图切换、Mermaid 和 KaTeX 支持、评论，以及可选的基于 OMP agent 配置的 AI 问答。
 
 ## 环境要求
 
-- Bun `>= 1.3.0`
+- Node.js `>= 20.0.0`
 - 一个 Markdown 内容目录。目录中存在 `README.md` 时会作为首页。
+- Bun 是可选项：可以用来安装依赖和运行开发测试，但发布后的 CLI 本身运行在 Node 上。
 
 ## 安装
 
-`doc-pi` 是一个基于 Bun 运行的 CLI。无论使用哪种安装方式，都需要先安装 Bun，并确保 `bun` 在 `PATH` 中，因为可执行入口使用 `#!/usr/bin/env bun`。
+`doc-pi` 运行在 Node 上。npm 和 Bun 都可以作为包安装器使用，按你的工作流选择即可。
 
 ### 从 npm registry 安装
 
@@ -67,7 +68,7 @@ doc-pi --root ./docs
 ```bash
 git clone https://github.com/langgo/doc-pi.git
 cd doc-pi
-bun install
+npm install
 npm install -g .
 doc-pi --root ./docs
 ```
@@ -99,6 +100,7 @@ doc-pi --root ./docs --no-ai-qa
 如果不 link，开发时也可以直接运行仓库中的入口：
 
 ```bash
+node bin/doc-pi.js --root ./docs --port 3000
 bun run bin/doc-pi.js --root ./docs --port 3000
 ```
 
@@ -178,6 +180,13 @@ examples/ai-qa/omp/agent/models.yml.example
 ## 开发
 
 ```bash
+npm install
+npm run start
+```
+
+测试目前使用 Bun test runner：
+
+```bash
 bun install
 bun run test:all
 ```
@@ -186,8 +195,8 @@ bun run test:all
 
 |脚本|说明|
 |---|---|
-|`bun run start`|从当前 checkout 运行 CLI|
-|`bun run dev`|以 watch 模式运行 CLI|
+|`npm run start` / `bun run start`|使用 Node 从当前 checkout 运行 CLI|
+|`npm run dev` / `bun run dev`|使用 Node watch 模式运行 CLI|
 |`bun run test`|运行服务端/单元测试|
 |`bun run test:integration`|运行集成 API 测试|
 |`bun run test:e2e`|运行浏览器 E2E 测试|

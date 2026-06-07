@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { createServer } from 'http';
 import { mkdir, readFile } from 'fs/promises';
 import { existsSync } from 'fs';

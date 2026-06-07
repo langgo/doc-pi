@@ -10,10 +10,15 @@ async function loadPackageJson() {
 }
 
 describe('package verification scripts', () => {
-  it('package should expose the doc-pi CLI binary', async () => {
+  it('package should expose a Node-compatible doc-pi CLI binary', async () => {
     const pkg = await loadPackageJson();
+    const cli = await readProjectFile('bin/doc-pi.js');
     expect(pkg.bin).toEqual({ 'doc-pi': './bin/doc-pi.js' });
     expect(pkg.type).toBe('module');
+    const serverEntry = await readProjectFile('src/server.js');
+    expect(cli.startsWith('#!/usr/bin/env node')).toBe(true);
+    expect(cli).not.toContain('#!/usr/bin/env bun');
+    expect(serverEntry).not.toContain('#!/usr/bin/env bun');
   });
 
   it('package should be publishable to npm with runtime files only', async () => {
@@ -25,7 +30,7 @@ describe('package verification scripts', () => {
       type: 'git',
       url: 'git+https://github.com/langgo/doc-pi.git',
     });
-    expect(pkg.engines).toEqual({ bun: '>=1.3.0' });
+    expect(pkg.engines).toEqual({ node: '>=20.0.0' });
     expect(pkg.files).toEqual([
       'bin/',
       'src/server.js',
