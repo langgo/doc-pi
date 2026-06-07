@@ -28,6 +28,27 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('toggles sidebar search help hints', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.click('.doc-search-help-toggle');
+      await page.waitForSelector('.doc-search-help:not([hidden])');
+      const helpText = await page.$eval('.doc-search-help', el => el.textContent);
+      expect(helpText).toContain('tag:<name>');
+      expect(helpText).toContain('/');
+      expect(helpText).toContain('↑/↓');
+      await page.click('.doc-search-help-toggle');
+      await page.waitForFunction(() => document.querySelector('.doc-search-help')?.hidden === true);
+      await page.click('.doc-search-help-toggle');
+      await page.waitForSelector('.doc-search-help:not([hidden])');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-help')?.hidden === true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('marks the keyboard-focused recent sidebar search as selected', async () => {
     const page = await browser.newPage();
     try {
