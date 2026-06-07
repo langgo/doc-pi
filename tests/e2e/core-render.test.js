@@ -28,6 +28,74 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('aborts stale sidebar search requests', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        const originalFetch = window.fetch.bind(window);
+        window.__docPiSearchSignals = [];
+        window.fetch = (input, init = {}) => {
+          const url = String(input);
+          if (url.includes('/api/search?q=')) window.__docPiSearchSignals.push(init.signal || null);
+          return originalFetch(input, init);
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let releaseSlow;
+      const slowReleased = new Promise(resolve => { releaseSlow = resolve; });
+      await page.route('**/api/search?q=*', async route => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get('q') === 'slow') {
+          await slowReleased;
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) }).catch(() => {});
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'slow');
+      await page.waitForFunction(() => window.__docPiSearchSignals?.length === 1);
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForFunction(() => window.__docPiSearchSignals?.length === 2);
+      expect(await page.evaluate(() => window.__docPiSearchSignals[0]?.aborted)).toBe(true);
+      expect(await page.evaluate(() => window.__docPiSearchSignals[1]?.aborted)).toBe(false);
+      await page.waitForSelector('.doc-search-result');
+      releaseSlow();
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('aborts loading sidebar searches when cleared', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        const originalFetch = window.fetch.bind(window);
+        window.__docPiSearchSignals = [];
+        window.fetch = (input, init = {}) => {
+          const url = String(input);
+          if (url.includes('/api/search?q=')) window.__docPiSearchSignals.push(init.signal || null);
+          return originalFetch(input, init);
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let releaseSlow;
+      const slowReleased = new Promise(resolve => { releaseSlow = resolve; });
+      await page.route('**/api/search?q=*', async route => {
+        await slowReleased;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) }).catch(() => {});
+      });
+      await page.fill('.doc-search-input', 'slow');
+      await page.waitForFunction(() => window.__docPiSearchSignals?.length === 1);
+      await page.click('.doc-search-clear');
+      expect(await page.evaluate(() => window.__docPiSearchSignals[0]?.aborted)).toBe(true);
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+      expect(await page.$$('.doc-search-retry')).toHaveLength(0);
+      releaseSlow();
+    } finally {
+      await page.close();
+    }
+  });
+
   it('ignores stale sidebar search responses', async () => {
     const page = await browser.newPage();
     try {
