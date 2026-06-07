@@ -49,6 +49,23 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('updates reading progress while scrolling', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.reading-progress', { state: 'attached' });
+      const initial = await page.$eval('.reading-progress', el => Number(el.style.getPropertyValue('--reading-progress')));
+      expect(initial).toBeLessThanOrEqual(5);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.reading-progress')).getPropertyValue('--reading-progress')) > 90);
+      const scrolled = await page.$eval('.reading-progress', el => Number(getComputedStyle(el).getPropertyValue('--reading-progress')));
+      expect(scrolled).toBeGreaterThan(90);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('supports reader keyboard shortcuts without hijacking text input', async () => {
     const page = await browser.newPage();
     try {

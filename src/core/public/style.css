@@ -9,6 +9,19 @@ body {
 }
 
 /* Layout */
+.reading-progress {
+  --reading-progress: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: calc(var(--reading-progress) * 1%);
+  height: 3px;
+  background: linear-gradient(90deg, #0969da, #54aeff);
+  z-index: 500;
+  pointer-events: none;
+  transition: width 0.08s linear;
+}
+
 .app { display: flex; min-height: 100vh; }
 
 /* Sidebar */
