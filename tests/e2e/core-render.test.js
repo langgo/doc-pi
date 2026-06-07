@@ -28,6 +28,24 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('supports keyboard navigation in sidebar search results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-result'));
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-input'));
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === '');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('removes tag filter tokens when clicking query chips', async () => {
     const page = await browser.newPage();
     try {

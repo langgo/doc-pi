@@ -43,6 +43,24 @@
     }
   }
 
+  function searchResults() {
+    return Array.prototype.slice.call(resultsEl.querySelectorAll('.doc-search-result'));
+  }
+
+  function clearSearch() {
+    input.value = '';
+    renderFilters('');
+    clearResults('');
+    activeRequest += 1;
+  }
+
+  function focusResult(index) {
+    var results = searchResults();
+    if (!results.length) return false;
+    results[Math.max(0, Math.min(index, results.length - 1))].focus();
+    return true;
+  }
+
   function renderResults(results) {
     resultsEl.innerHTML = '';
     if (!results.length) {
@@ -54,6 +72,7 @@
       var result = results[i];
       var link = document.createElement('a');
       link.className = 'doc-search-result';
+      link.tabIndex = -1;
       link.href = '/' + encodeURIComponent(result.file) + '?q=' + encodeURIComponent(input.value.trim());
       var tags = Array.isArray(result.tags) && result.tags.length
         ? '<span class="doc-search-tags">' + result.tags.map(function (tag) {
@@ -90,6 +109,41 @@
       clearResults('搜索失败: ' + err.message);
     }
   }
+
+  input.addEventListener('keydown', function (event) {
+    if (event.key === 'ArrowDown') {
+      if (focusResult(0)) event.preventDefault();
+      return;
+    }
+    if (event.key === 'Escape') {
+      if (input.value || resultsEl.children.length) {
+        event.preventDefault();
+        clearSearch();
+      }
+    }
+  });
+
+  resultsEl.addEventListener('keydown', function (event) {
+    var results = searchResults();
+    var index = results.indexOf(document.activeElement);
+    if (index === -1) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusResult(index + 1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (index <= 0) input.focus();
+      else focusResult(index - 1);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      clearSearch();
+      input.focus();
+    }
+  });
 
   filtersEl.addEventListener('click', function (event) {
     var chip = event.target.closest('.doc-search-filter-chip');
