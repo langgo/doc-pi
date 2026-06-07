@@ -58,6 +58,39 @@ export function buildTocHtml(headings, currentFile) {
   return html;
 }
 
+function extractFrontmatter(mdContent) {
+  if (!mdContent.startsWith('---\n')) return { mdContent, metadata: null };
+  const end = mdContent.indexOf('\n---', 4);
+  if (end === -1) return { mdContent, metadata: null };
+  const raw = mdContent.slice(4, end).trim();
+  const metadata = {};
+  for (const line of raw.split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (key) metadata[key] = value;
+  }
+  return { mdContent: mdContent.slice(end + 4).replace(/^\n+/, ''), metadata };
+}
+
+function renderFrontmatterMetadata(metadata) {
+  if (!metadata || (!metadata.title && !metadata.description && !metadata.tags)) return '';
+  let html = '<section class="frontmatter-metadata" aria-label="文档元数据">';
+  if (metadata.title) html += '<div class="frontmatter-title">' + escapeHtml(metadata.title) + '</div>';
+  if (metadata.description) html += '<div class="frontmatter-description">' + escapeHtml(metadata.description) + '</div>';
+  if (metadata.tags) {
+    html += '<div class="frontmatter-tags">';
+    for (const tag of metadata.tags.split(',')) {
+      const trimmed = tag.trim();
+      if (trimmed) html += '<span class="frontmatter-tag">' + escapeHtml(trimmed) + '</span>';
+    }
+    html += '</div>';
+  }
+  html += '</section>';
+  return html;
+}
+
 function extractFootnotes(mdContent) {
   const footnotes = [];
   const withoutDefinitions = mdContent.replace(/^\[\^([^\]]+)\]:\s+(.+)$/gm, (_, id, content) => {
@@ -106,6 +139,10 @@ function secureExternalLinks(html) {
 export async function processMarkdown(filePath) {
   let mdContent = await readFile(filePath, 'utf-8');
   mdContent = stripBOM(mdContent);
+
+  const frontmatterResult = extractFrontmatter(mdContent);
+  mdContent = frontmatterResult.mdContent;
+  const metadata = frontmatterResult.metadata;
 
   const footnoteResult = extractFootnotes(mdContent);
   mdContent = footnoteResult.mdContent;
@@ -184,6 +221,7 @@ export async function processMarkdown(filePath) {
       return '<' + tag + safeAttrs + '>';
     });
 
+  html = renderFrontmatterMetadata(metadata) + html;
   html = secureExternalLinks(html);
 
   // Add id attributes and self-links to headings for TOC anchor navigation.
