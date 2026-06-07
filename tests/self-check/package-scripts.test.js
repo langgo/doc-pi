@@ -16,6 +16,35 @@ describe('package verification scripts', () => {
     expect(pkg.type).toBe('module');
   });
 
+  it('package should be publishable to npm with runtime files only', async () => {
+    const pkg = await loadPackageJson();
+    expect(pkg.private).toBe(false);
+    expect(pkg.description).toBeTruthy();
+    expect(pkg.license).toBeTruthy();
+    expect(pkg.repository).toEqual({
+      type: 'git',
+      url: 'git+https://github.com/langgo/doc-pi.git',
+    });
+    expect(pkg.engines).toEqual({ bun: '>=1.3.0' });
+    expect(pkg.files).toEqual([
+      'bin/',
+      'src/server.js',
+      'src/runtime/config.js',
+      'src/core/server/*.js',
+      'src/core/public/*.js',
+      'src/core/public/*.css',
+      'src/core/public/template/*.ejs',
+      'src/plugins/*/index.js',
+      'src/plugins/*/client/*.js',
+      'src/plugins/*/client/*.css',
+      'src/plugins/*/server/*.js',
+      'examples/',
+      'README.md',
+      'README_CN.md',
+      'LICENSE',
+    ]);
+  });
+
   it('test script should include all server unit test directories', async () => {
     const pkg = await loadPackageJson();
     expect(pkg.scripts.test).toContain('src/core/server/__tests__/');
