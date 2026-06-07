@@ -996,12 +996,16 @@ describe('Core render E2E', () => {
       const nav = await page.$eval('.markdown-content .chapter-nav-bottom', el => ({
         label: el.getAttribute('aria-label'),
         previous: el.querySelector('.nav-prev')?.getAttribute('href'),
+        previousLabel: el.querySelector('.nav-prev')?.getAttribute('aria-label'),
         next: el.querySelector('.nav-next')?.getAttribute('href'),
+        nextLabel: el.querySelector('.nav-next')?.getAttribute('aria-label'),
         text: el.textContent,
       }));
       expect(nav.label).toBe('章节导航');
       expect(nav.previous).toBe('/README.md');
+      expect(nav.previousLabel).toBe('上一章 README，快捷键 [');
       expect(nav.next).toBe('/sample-chapter.md');
+      expect(nav.nextLabel).toBe('下一章 sample-chapter，快捷键 ]');
       expect(nav.text).toContain('上一章');
       expect(nav.text).toContain('下一章');
       expect(nav.text).toContain('快捷键 [');
