@@ -49,6 +49,31 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('copies fenced code blocks without adding buttons to inline code', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        window.__copiedText = null;
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: async text => { window.__copiedText = text; },
+          },
+        });
+      });
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForSelector('.code-copy-button');
+      expect(await page.$$eval('.markdown-content p code .code-copy-button', buttons => buttons.length)).toBe(0);
+      await page.click('.code-copy-button');
+      expect(await page.evaluate(() => window.__copiedText)).toBe("console.log('hello world');");
+      const state = await page.$eval('.code-copy-button', el => ({ text: el.textContent, copied: el.classList.contains('copied') }));
+      expect(state.text).toBe('已复制');
+      expect(state.copied).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('uses print-friendly layout and hides interactive chrome', async () => {
     const page = await browser.newPage();
     try {
