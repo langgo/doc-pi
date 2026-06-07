@@ -11,6 +11,7 @@
   if (!inputWrap || !input || !clearButton || !countEl || !statusEl || !helpToggle || !helpEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
+  var activeSearchController = null;
   var timer = null;
   var recentStorageKey = 'doc-pi:recent-searches';
 
@@ -268,7 +269,14 @@
     }
   }
 
+  function abortActiveSearch() {
+    if (!activeSearchController) return;
+    activeSearchController.abort();
+    activeSearchController = null;
+  }
+
   function clearSearch() {
+    abortActiveSearch();
     input.value = '';
     setClearVisible('');
     renderFilters('');
@@ -326,6 +334,7 @@
   }
 
   async function runSearch(query) {
+    abortActiveSearch();
     var requestId = ++activeRequest;
     setClearVisible(query);
     setErrorState(false);
@@ -334,13 +343,16 @@
       clearResults('');
       return;
     }
+    var controller = new AbortController();
+    activeSearchController = controller;
     statusEl.textContent = '搜索中…';
     setResultCount(0, false);
     setLoading(true);
     try {
-      var res = await fetch('/api/search?q=' + encodeURIComponent(query));
+      var res = await fetch('/api/search?q=' + encodeURIComponent(query), { signal: controller.signal });
       var body = await res.json();
       if (requestId !== activeRequest) return;
+      if (activeSearchController === controller) activeSearchController = null;
       setLoading(false);
       if (!res.ok) {
         clearResults(body.error || '搜索失败');
@@ -351,7 +363,8 @@
       renderResults(body.results || []);
       writeRecentSearch(query);
     } catch (err) {
-      if (requestId !== activeRequest) return;
+      if (requestId !== activeRequest || err.name === 'AbortError') return;
+      if (activeSearchController === controller) activeSearchController = null;
       setLoading(false);
       clearResults('搜索失败: ' + err.message);
       setErrorState(true);
