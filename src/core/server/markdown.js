@@ -58,6 +58,19 @@ export function buildTocHtml(headings, currentFile) {
   return html;
 }
 
+function secureExternalLinks(html) {
+  return html.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
+    const hrefMatch = attrs.match(/\s+href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    if (!hrefMatch) return match;
+    const href = hrefMatch[2] || hrefMatch[3] || hrefMatch[4] || '';
+    if (!/^https?:\/\//i.test(href)) return match;
+    let nextAttrs = attrs
+      .replace(/\s+target\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '')
+      .replace(/\s+rel\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '');
+    return '<a' + nextAttrs + ' target="_blank" rel="noopener noreferrer">';
+  });
+}
+
 // Process markdown content: protect mermaid/math blocks, render with marked, restore
 export async function processMarkdown(filePath) {
   let mdContent = await readFile(filePath, 'utf-8');
@@ -135,6 +148,8 @@ export async function processMarkdown(filePath) {
         .replace(/\s+src\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '');
       return '<' + tag + safeAttrs + '>';
     });
+
+  html = secureExternalLinks(html);
 
   // Add id attributes and self-links to headings for TOC anchor navigation.
   html = html.replace(/<(h[1-4])>(.*?)<\/\1>/g, (match, tag, text) => {

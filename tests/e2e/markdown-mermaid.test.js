@@ -25,8 +25,18 @@ describe('Markdown and Mermaid E2E', () => {
       expect(await page.$eval('.markdown-content pre code', el => el.textContent.trim())).toContain('const answer = 42;');
       expect(await page.$eval('.markdown-content table tbody tr td:first-child', el => el.textContent.trim())).toBe('alpha');
       expect(await page.$eval('.markdown-content blockquote', el => el.textContent.trim())).toBe('Quoted text for rendering.');
-      const link = await page.$eval('.markdown-content a[href="https://example.com"]', el => ({ text: el.textContent.trim(), target: el.getAttribute('target') }));
+      const link = await page.$eval('.markdown-content a[href="https://example.com"]', el => ({
+        text: el.textContent.trim(),
+        target: el.getAttribute('target'),
+        rel: el.getAttribute('rel'),
+      }));
+      const localTarget = await page.$eval('.markdown-content a[href="/sample-chapter.md"]', el => el.getAttribute('target'));
+      const hashTarget = await page.$eval('.markdown-content a[href="#table"]', el => el.getAttribute('target'));
       expect(link.text).toBe('Example');
+      expect(link.target).toBe('_blank');
+      expect(link.rel).toBe('noopener noreferrer');
+      expect(localTarget).toBeNull();
+      expect(hashTarget).toBeNull();
     } finally {
       await page.close();
     }

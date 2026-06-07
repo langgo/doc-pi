@@ -24,6 +24,8 @@ const answer = 42;
 > Quoted text for rendering.
 
 [Example](https://example.com)
+[Local chapter](/sample-chapter.md)
+[Hash link](#table)
 
 ## Image
 
