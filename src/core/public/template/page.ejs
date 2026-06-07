@@ -65,19 +65,7 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-  <script>
-    mermaid.initialize({ startOnLoad: false });
-
-    function renderMermaid() {
-      mermaid.run({ querySelector: '.mermaid' });
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', renderMermaid);
-    } else {
-      renderMermaid();
-    }
-  </script>
+  <script src="/core/public/mermaid-renderer.js"></script>
   <script src="/core/public/core-state.js"></script>
   <script src="/core/public/dom-utils.js"></script>
   <script src="/core/public/sidebar-search.js"></script>

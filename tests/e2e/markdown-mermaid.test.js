@@ -65,6 +65,20 @@ describe('Markdown and Mermaid E2E', () => {
     }
   }, 15000);
 
+  it('shows a readable fallback when Mermaid rendering fails', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.mermaid-error', { timeout: 10000 });
+      const errorText = await page.$eval('.mermaid-error', el => el.textContent);
+      expect(errorText).toContain('Mermaid diagram failed to render');
+      expect(errorText).toContain('this is not valid mermaid');
+      expect(await page.$('.mermaid-container svg')).not.toBeNull();
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
   it('does not execute raw HTML scripts from markdown', async () => {
     const page = await browser.newPage();
     try {
