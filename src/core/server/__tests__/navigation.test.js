@@ -81,6 +81,13 @@ describe('navigation', () => {
       expect(lastNav).toContain('aria-disabled="true"');
       expect(lastNav).toContain('已是最后一章');
     });
+
+    it('should show chapter position in bottom navigation', () => {
+      const nav = getChapterNav('02-核心概念.md', chapters, { position: 'bottom', withLabels: true });
+      expect(nav).toContain('class="chapter-nav-position"');
+      expect(nav).toContain('aria-label="当前第 2 章，共 3 章"');
+      expect(nav).toContain('第 2 / 3 章');
+    });
   });
 
   describe('buildFileListToc', () => {

@@ -673,7 +673,14 @@ body {
 
 .chapter-nav-bottom a,
 .chapter-nav-bottom .nav-disabled {
-  max-width: 48%;
+  max-width: 42%;
+}
+.chapter-nav-position {
+  align-self: center;
+  flex: 0 0 auto;
+  color: #656d76;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 .chapter-nav-bottom a {
   color: #0969da;

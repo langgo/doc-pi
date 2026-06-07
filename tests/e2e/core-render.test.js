@@ -1053,6 +1053,8 @@ describe('Core render E2E', () => {
         label: el.getAttribute('aria-label'),
         previous: el.querySelector('.nav-prev')?.getAttribute('href'),
         previousLabel: el.querySelector('.nav-prev')?.getAttribute('aria-label'),
+        positionText: el.querySelector('.chapter-nav-position')?.textContent,
+        positionLabel: el.querySelector('.chapter-nav-position')?.getAttribute('aria-label'),
         next: el.querySelector('.nav-next')?.getAttribute('href'),
         nextLabel: el.querySelector('.nav-next')?.getAttribute('aria-label'),
         text: el.textContent,
@@ -1060,6 +1062,8 @@ describe('Core render E2E', () => {
       expect(nav.label).toBe('章节导航');
       expect(nav.previous).toBe('/README.md');
       expect(nav.previousLabel).toBe('上一章 README，快捷键 [');
+      expect(nav.positionText).toBe('第 2 / 3 章');
+      expect(nav.positionLabel).toBe('当前第 2 章，共 3 章');
       expect(nav.next).toBe('/sample-chapter.md');
       expect(nav.nextLabel).toBe('下一章 sample-chapter，快捷键 ]');
       expect(nav.text).toContain('上一章');

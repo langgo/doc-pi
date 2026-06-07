@@ -38,6 +38,11 @@ export function getChapterNav(currentFile, chapterFiles, options = {}) {
     parts.push('<span class="nav-next nav-disabled" aria-disabled="true"><span>下一章</span><strong>已是最后一章</strong><em>快捷键 ]</em></span>');
   }
   if (!parts.length) return '';
+  if (withLabels) {
+    const currentChapter = idx + 1;
+    const totalChapters = chapterFiles.length;
+    parts.splice(1, 0, `<span class="chapter-nav-position" aria-label="当前第 ${currentChapter} 章，共 ${totalChapters} 章">第 ${currentChapter} / ${totalChapters} 章</span>`);
+  }
   const className = options.position === 'bottom' ? 'chapter-nav chapter-nav-bottom' : 'chapter-nav';
   const aria = options.position === 'bottom' ? ' aria-label="章节导航"' : '';
   return `<nav class="${className}"${aria}>${parts.join('')}</nav>`;
