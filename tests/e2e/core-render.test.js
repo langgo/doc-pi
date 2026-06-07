@@ -28,6 +28,26 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('filters sidebar search results by tag tokens', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-result');
+      const firstResult = await page.$eval('.doc-search-result', item => ({
+        text: item.textContent,
+        tags: Array.from(item.querySelectorAll('.doc-search-tag')).map(tag => tag.textContent),
+      }));
+      expect(firstResult.text).toContain('Rich Metadata Title');
+      expect(firstResult.tags).toEqual(['docs', 'guide']);
+      await page.fill('.doc-search-input', 'tag:missing footnote');
+      await page.waitForFunction(() => document.querySelector('.doc-search-status')?.textContent === '无匹配结果');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows frontmatter tags in sidebar search results', async () => {
     const page = await browser.newPage();
     try {

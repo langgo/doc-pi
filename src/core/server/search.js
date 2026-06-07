@@ -7,16 +7,28 @@ function extractTitle(fileName, content) {
   return match ? match[1].trim() : fileName.replace(/\.md$/, '');
 }
 
-function normalizeQuery(query) {
-  return String(query || '').trim();
+function parseQuery(query) {
+  const normalized = String(query || '').trim();
+  const tags = [];
+  const terms = [];
+  for (const token of normalized.split(/\s+/)) {
+    if (!token) continue;
+    if (token.toLowerCase().startsWith('tag:') && token.length > 4) {
+      tags.push(token.slice(4).toLowerCase());
+    } else {
+      terms.push(token);
+    }
+  }
+  return { normalized, text: terms.join(' '), tags };
 }
 
 export async function searchMarkdownFiles(rootDir, query, options = {}) {
-  const normalized = normalizeQuery(query);
+  const parsed = parseQuery(query);
+  const normalized = parsed.normalized;
   const limit = Math.max(1, Number(options.limit) || 20);
-  if (!normalized) return { query: normalized, results: [] };
+  if (!normalized || !parsed.text) return { query: normalized, results: [] };
 
-  const needle = normalized.toLowerCase();
+  const needle = parsed.text.toLowerCase();
   const files = (await readdir(rootDir))
     .filter(file => file.endsWith('.md') && file !== 'AGENTS.md')
     .sort((a, b) => a.localeCompare(b));
@@ -31,6 +43,8 @@ export async function searchMarkdownFiles(rootDir, query, options = {}) {
     const tags = frontmatter.metadata?.tags
       ? frontmatter.metadata.tags.split(',').map(tag => tag.trim()).filter(Boolean)
       : [];
+    const lowerTags = tags.map(tag => tag.toLowerCase());
+    if (parsed.tags.length && !parsed.tags.every(tag => lowerTags.includes(tag))) continue;
     const lines = content.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
