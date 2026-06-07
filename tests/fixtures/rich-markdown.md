@@ -8,6 +8,11 @@ This fixture covers rich markdown rendering.
 const answer = 42;
 ```
 
+## Task List
+
+- [x] Finished item
+- [ ] Pending item
+
 ## Table
 
 | Name | Value |

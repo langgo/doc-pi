@@ -144,6 +144,10 @@ export async function processMarkdown(filePath) {
     return '<' + tag + ' id="' + id + '">' + text + anchor + '</' + tag + '>';
   });
 
+  html = html
+    .replace(/<li>(\s*<input[^>]*type="checkbox"[^>]*>)/g, '<li class="task-list-item">$1')
+    .replace(/<ul>\s*(<li class="task-list-item">)/g, '<ul class="task-list">$1');
+
   // Restore mermaid blocks as plain divs for mermaid.js
   html = html.replace(/<!--MERMAID_(\d+)-->/g, (_, idx) => {
     const code = mermaidBlocks[parseInt(idx)];

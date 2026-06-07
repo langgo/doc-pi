@@ -32,6 +32,32 @@ describe('Markdown and Mermaid E2E', () => {
     }
   });
 
+  it('renders task lists as read-only aligned checkboxes', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content li.task-list-item');
+      const state = await page.evaluate(() => {
+        const items = Array.from(document.querySelectorAll('.markdown-content li.task-list-item'));
+        const inputs = Array.from(document.querySelectorAll('.markdown-content li.task-list-item input[type="checkbox"]'));
+        return {
+          itemCount: items.length,
+          checked: inputs.map(input => input.checked),
+          disabled: inputs.map(input => input.disabled),
+          firstListStyle: getComputedStyle(items[0]).listStyleType,
+          firstDisplay: getComputedStyle(items[0]).display,
+        };
+      });
+      expect(state.itemCount).toBe(2);
+      expect(state.checked).toEqual([true, false]);
+      expect(state.disabled).toEqual([true, true]);
+      expect(state.firstListStyle).toBe('none');
+      expect(state.firstDisplay).toBe('flex');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('opens markdown images in the lightbox', async () => {
     const page = await browser.newPage();
     try {
