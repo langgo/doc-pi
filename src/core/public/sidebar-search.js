@@ -42,6 +42,22 @@
     input.setAttribute('aria-invalid', hasError ? 'true' : 'false');
   }
 
+  function removeRetry() {
+    var retry = statusEl.querySelector('.doc-search-retry');
+    if (retry) retry.remove();
+  }
+
+  function renderRetry() {
+    removeRetry();
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'doc-search-retry';
+    retry.textContent = '重试';
+    retry.setAttribute('aria-label', '重试搜索');
+    statusEl.appendChild(document.createTextNode(' '));
+    statusEl.appendChild(retry);
+  }
+
   function setHelpVisible(visible) {
     helpEl.hidden = !visible;
     helpToggle.setAttribute('aria-expanded', visible ? 'true' : 'false');
@@ -50,6 +66,7 @@
   function clearResults(message) {
     resultsEl.innerHTML = '';
     statusEl.textContent = message || '';
+    removeRetry();
     setResultCount(0, false);
     setLoading(false);
     setErrorState(false);
@@ -328,6 +345,7 @@
       if (!res.ok) {
         clearResults(body.error || '搜索失败');
         setErrorState(true);
+        renderRetry();
         return;
       }
       renderResults(body.results || []);
@@ -337,6 +355,7 @@
       setLoading(false);
       clearResults('搜索失败: ' + err.message);
       setErrorState(true);
+      renderRetry();
     }
   }
 
@@ -409,6 +428,12 @@
       clearSearch();
       input.focus();
     }
+  });
+
+  statusEl.addEventListener('click', function (event) {
+    if (!event.target.closest('.doc-search-retry')) return;
+    runSearch(input.value);
+    input.focus();
   });
 
   resultsEl.addEventListener('click', function (event) {
