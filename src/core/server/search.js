@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'fs/promises';
 import path from 'path';
-import { stripBOM, extractFrontmatter } from './markdown.js';
+import { stripBOM, extractFrontmatter, analyzeReadingStats } from './markdown.js';
 
 function extractTitle(fileName, content) {
   const match = content.match(/^#\s+(.+)$/m);
@@ -45,6 +45,7 @@ export async function searchMarkdownFiles(rootDir, query, options = {}) {
       : [];
     const lowerTags = tags.map(tag => tag.toLowerCase());
     if (parsed.tags.length && !parsed.tags.every(tag => lowerTags.includes(tag))) continue;
+    const readingStats = analyzeReadingStats(content);
     const lines = content.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
@@ -55,6 +56,8 @@ export async function searchMarkdownFiles(rootDir, query, options = {}) {
         title,
         snippet: line.trim(),
         tags,
+        readingMinutes: readingStats.minutes,
+        readingCount: readingStats.count,
       });
       if (results.length >= limit) {
         return { query: normalized, results };

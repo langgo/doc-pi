@@ -692,14 +692,18 @@ describe('Core render E2E', () => {
     }
   });
 
-  it('shows frontmatter tags in sidebar search results', async () => {
+  it('shows frontmatter tags and reading stats in sidebar search results', async () => {
     const page = await browser.newPage();
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
       await page.fill('.doc-search-input', 'footnote');
       await page.waitForSelector('.doc-search-tag');
-      const tags = await page.$eval('.doc-search-result', item => Array.from(item.querySelectorAll('.doc-search-tag')).map(tag => tag.textContent));
-      expect(tags).toEqual(['docs', 'guide']);
+      const result = await page.$eval('.doc-search-result', item => ({
+        tags: Array.from(item.querySelectorAll('.doc-search-tag')).map(tag => tag.textContent),
+        stats: item.querySelector('.doc-search-reading-stats')?.textContent,
+      }));
+      expect(result.tags).toEqual(['docs', 'guide']);
+      expect(result.stats).toBe('约 1 分钟 · 98 字');
     } finally {
       await page.close();
     }

@@ -74,8 +74,9 @@ export function extractFrontmatter(mdContent) {
   return { mdContent: mdContent.slice(end + 4).replace(/^\n+/, ''), metadata };
 }
 
-function analyzeReadingStats(mdContent) {
+export function analyzeReadingStats(mdContent) {
   const text = mdContent
+    .replace(/^\[\^([^\]]+)\]:\s+(.+)$/gm, ' ')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/<[^>]*>/g, ' ')
     .replace(/[#>*_`\[\]()|:-]/g, ' ')

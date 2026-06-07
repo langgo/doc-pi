@@ -55,6 +55,8 @@ describe('searchMarkdownFiles', () => {
         title: 'Intro',
         snippet: 'This chapter explains Mermaid diagrams.',
         tags: [],
+        readingMinutes: 1,
+        readingCount: 6,
       },
     ]);
   });
