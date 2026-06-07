@@ -24,13 +24,13 @@ export function getChapterNav(currentFile, chapterFiles, options = {}) {
   if (prev) {
     const prevName = escapeHtml(prev.replace(/\.md$/, ''));
     const hint = withLabels ? '<em>快捷键 [</em>' : '';
-    const aria = withLabels ? ` aria-label="上一章 ${prevName}，快捷键 ["` : '';
+    const aria = withLabels ? ` aria-label="上一章 ${prevName}，快捷键 ["` : ` aria-label="上一章 ${prevName}"`;
     parts.push(`<a href="/${prev}" class="nav-prev"${aria}>← ${withLabels ? '<span>上一章</span><strong>' + prevName + '</strong>' + hint : prevName}</a>`);
   }
   if (next) {
     const nextName = escapeHtml(next.replace(/\.md$/, ''));
     const hint = withLabels ? '<em>快捷键 ]</em>' : '';
-    const aria = withLabels ? ` aria-label="下一章 ${nextName}，快捷键 ]"` : '';
+    const aria = withLabels ? ` aria-label="下一章 ${nextName}，快捷键 ]"` : ` aria-label="下一章 ${nextName}"`;
     parts.push(`<a href="/${next}" class="nav-next"${aria}>${withLabels ? '<span>下一章</span><strong>' + nextName + '</strong>' + hint : nextName} →</a>`);
   }
   if (!parts.length) return '';
