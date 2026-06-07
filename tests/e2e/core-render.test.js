@@ -49,6 +49,24 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('labels fenced code block languages without overlapping copy controls', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForSelector('.code-language-label');
+      expect(await page.$eval('.code-language-label', el => el.textContent)).toBe('javascript');
+      expect(await page.$$eval('.markdown-content p code .code-language-label', labels => labels.length)).toBe(0);
+      const positions = await page.evaluate(() => {
+        const label = document.querySelector('.code-language-label').getBoundingClientRect();
+        const button = document.querySelector('.code-copy-button').getBoundingClientRect();
+        return { labelRight: label.right, buttonLeft: button.left };
+      });
+      expect(positions.labelRight).toBeLessThanOrEqual(positions.buttonLeft - 4);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('copies fenced code blocks without adding buttons to inline code', async () => {
     const page = await browser.newPage();
     try {
