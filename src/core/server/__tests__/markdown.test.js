@@ -100,6 +100,26 @@ describe('markdown', () => {
       expect(html).toContain('<h');
     });
 
+    it('should render frontmatter metadata and remove it from body', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-frontmatter.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, '---\ntitle: Custom Title\ndescription: Short summary\ntags: docs, guide\n---\n# Body Title\n\nBody text.\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('<section class="frontmatter-metadata"');
+        expect(html).toContain('Custom Title');
+        expect(html).toContain('Short summary');
+        expect(html).toContain('<span class="frontmatter-tag">docs</span>');
+        expect(html).toContain('<span class="frontmatter-tag">guide</span>');
+        expect(html).not.toContain('title: Custom Title');
+        expect(html).not.toContain('description: Short summary');
+        expect(html).toContain('<h1 id="body-title">');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
     it('should render markdown footnotes with backlinks', async () => {
       const fs = await import('fs/promises');
       const tmpPath = path.join(ROOT_DIR, 'data', 'test-footnotes.md');

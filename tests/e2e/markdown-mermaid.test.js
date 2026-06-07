@@ -22,6 +22,14 @@ describe('Markdown and Mermaid E2E', () => {
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
       expect(await page.$eval('.markdown-content h1', el => el.childNodes[0].textContent.trim())).toBe('Rich Markdown Fixture');
+      const metadata = await page.$eval('.frontmatter-metadata', el => ({
+        text: el.textContent,
+        tags: Array.from(el.querySelectorAll('.frontmatter-tag')).map(tag => tag.textContent),
+      }));
+      expect(metadata.text).toContain('Rich Metadata Title');
+      expect(metadata.text).toContain('Metadata summary for rendering.');
+      expect(metadata.tags).toEqual(['docs', 'guide']);
+      expect(await page.$eval('.markdown-content', el => el.textContent)).not.toContain('title: Rich Metadata Title');
       expect(await page.$eval('.markdown-content pre code', el => el.textContent.trim())).toContain('const answer = 42;');
       expect(await page.$eval('.markdown-content table tbody tr td:first-child', el => el.textContent.trim())).toBe('alpha');
       expect(await page.$eval('.markdown-content blockquote', el => el.textContent.trim())).toBe('Quoted text for rendering.');

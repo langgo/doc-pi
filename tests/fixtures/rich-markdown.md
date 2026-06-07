@@ -1,3 +1,9 @@
+---
+title: Rich Metadata Title
+description: Metadata summary for rendering.
+tags: docs, guide
+---
+
 # Rich Markdown Fixture
 
 This fixture covers rich markdown rendering with a footnote.[^1]
