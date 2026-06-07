@@ -28,6 +28,27 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('restores the last reading position for each chapter', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => {
+        history.scrollRestoration = 'manual';
+        window.scrollTo(0, 520);
+      });
+      await page.waitForFunction(() => window.scrollY >= 500);
+      await page.waitForTimeout(180);
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForFunction(() => window.scrollY <= 5);
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForFunction(() => window.scrollY >= 500);
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(500);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('syncs sidebar search when browser history removes URL query', async () => {
     const page = await browser.newPage();
     try {
