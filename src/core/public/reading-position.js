@@ -34,12 +34,17 @@
     window.requestAnimationFrame(savePosition);
   }
 
+  function maxScrollTop() {
+    var doc = document.documentElement;
+    return Math.max(0, doc.scrollHeight - window.innerHeight);
+  }
+
   function restorePosition() {
     if (restored || window.location.hash) return;
     restored = true;
     var position = readStoredPosition();
     if (!position) return;
-    window.scrollTo(0, position);
+    window.scrollTo(0, Math.min(position, maxScrollTop()));
   }
 
   window.addEventListener('scroll', scheduleSave, { passive: true });
