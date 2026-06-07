@@ -61,6 +61,12 @@ describe('navigation', () => {
       expect(nav).toContain('nav-next');
     });
 
+    it('should label compact chapter links for assistive technology', () => {
+      const nav = getChapterNav('02-核心概念.md', chapters);
+      expect(nav).toContain('aria-label="上一章 01-概述"');
+      expect(nav).toContain('aria-label="下一章 03-使用指南"');
+    });
+
     it('should return empty string for single chapter', () => {
       expect(getChapterNav('01-概述.md', ['01-概述.md'])).toBe('');
     });

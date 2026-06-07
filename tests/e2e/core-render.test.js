@@ -988,6 +988,29 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('labels compact chapter navigation links for adjacent markdown files', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content > .chapter-nav:not(.chapter-nav-bottom)');
+      const nav = await page.$eval('.markdown-content > .chapter-nav:not(.chapter-nav-bottom)', el => ({
+        previous: el.querySelector('.nav-prev')?.getAttribute('href'),
+        previousLabel: el.querySelector('.nav-prev')?.getAttribute('aria-label'),
+        next: el.querySelector('.nav-next')?.getAttribute('href'),
+        nextLabel: el.querySelector('.nav-next')?.getAttribute('aria-label'),
+        text: el.textContent,
+      }));
+      expect(nav.previous).toBe('/README.md');
+      expect(nav.previousLabel).toBe('上一章 README');
+      expect(nav.next).toBe('/sample-chapter.md');
+      expect(nav.nextLabel).toBe('下一章 sample-chapter');
+      expect(nav.text).toContain('README');
+      expect(nav.text).toContain('sample-chapter');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows bottom chapter navigation for adjacent markdown files', async () => {
     const page = await browser.newPage();
     try {
