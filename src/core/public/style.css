@@ -353,6 +353,23 @@ body {
 .markdown-content li { margin-bottom: 0.25em; }
 .markdown-content li + li { margin-top: 0.25em; }
 
+.markdown-content .task-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+.markdown-content .task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  list-style: none;
+}
+
+.markdown-content .task-list-item input[type="checkbox"] {
+  margin-top: 0.25em;
+  flex: 0 0 auto;
+}
+
 .markdown-content a { color: #0969da; text-decoration: none; }
 .markdown-content a:hover { text-decoration: underline; }
 
