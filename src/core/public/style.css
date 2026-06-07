@@ -277,6 +277,23 @@ body {
   background: #ddf4ff;
   outline: none;
 }
+.doc-search-clear-recent {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: #656d76;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.25rem;
+  text-align: left;
+}
+.doc-search-clear-recent:hover,
+.doc-search-clear-recent:focus {
+  color: #0969da;
+  text-decoration: underline;
+  outline: none;
+}
 .doc-search-title,
 .doc-search-meta,
 .doc-search-snippet {

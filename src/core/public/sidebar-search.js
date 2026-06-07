@@ -138,6 +138,16 @@
     } catch (err) {}
   }
 
+  function clearRecentSearches() {
+    try {
+      window.localStorage.removeItem(recentStorageKey);
+    } catch (err) {}
+    resultsEl.querySelectorAll('.doc-search-recent-item, .doc-search-clear-recent').forEach(function (item) {
+      item.remove();
+    });
+    if (!resultsEl.children.length && !input.value.trim()) statusEl.textContent = '';
+  }
+
   function renderRecentSearches() {
     if (String(input.value || '').trim()) return false;
     var recent = readRecentSearches();
@@ -154,6 +164,12 @@
       item.setAttribute('aria-label', '重新搜索 ' + recent[i]);
       resultsEl.appendChild(item);
     }
+    var clearRecent = document.createElement('button');
+    clearRecent.type = 'button';
+    clearRecent.className = 'doc-search-clear-recent';
+    clearRecent.textContent = '清空最近搜索';
+    clearRecent.setAttribute('aria-label', '清空最近搜索');
+    resultsEl.appendChild(clearRecent);
     return true;
   }
 
@@ -322,6 +338,12 @@
   });
 
   resultsEl.addEventListener('click', function (event) {
+    var clearRecent = event.target.closest('.doc-search-clear-recent');
+    if (clearRecent) {
+      clearRecentSearches();
+      input.focus();
+      return;
+    }
     var recentItem = event.target.closest('.doc-search-recent-item');
     if (!recentItem) return;
     input.value = recentItem.textContent || '';
