@@ -28,6 +28,19 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows frontmatter tags in sidebar search results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-tag');
+      const tags = await page.$eval('.doc-search-result', item => Array.from(item.querySelectorAll('.doc-search-tag')).map(tag => tag.textContent));
+      expect(tags).toEqual(['docs', 'guide']);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('searches markdown content from the sidebar', async () => {
     const page = await browser.newPage();
     try {

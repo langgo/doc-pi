@@ -15,6 +15,18 @@ afterEach(async () => {
 });
 
 describe('searchMarkdownFiles', () => {
+  it('returns frontmatter tags with search results', async () => {
+    await writeFile(path.join(tmpRoot, 'tagged.md'), '---\ntitle: Tagged Doc\ntags: docs, guide\n---\n# Tagged\nSearchable topic.\n', 'utf-8');
+    await writeFile(path.join(tmpRoot, 'plain.md'), '# Plain\nSearchable topic.\n', 'utf-8');
+
+    const result = await searchMarkdownFiles(tmpRoot, 'searchable');
+
+    const tagged = result.results.find(item => item.file === 'tagged.md');
+    const plain = result.results.find(item => item.file === 'plain.md');
+    expect(tagged.tags).toEqual(['docs', 'guide']);
+    expect(plain.tags).toEqual([]);
+  });
+
   it('returns line-level snippets for case-insensitive markdown matches', async () => {
     await writeFile(path.join(tmpRoot, 'README.md'), '# Home\nWelcome to Doc Pi\n', 'utf-8');
     await writeFile(path.join(tmpRoot, '01-intro.md'), '# Intro\nThis chapter explains Mermaid diagrams.\n', 'utf-8');
@@ -29,6 +41,7 @@ describe('searchMarkdownFiles', () => {
         line: 2,
         title: 'Intro',
         snippet: 'This chapter explains Mermaid diagrams.',
+        tags: [],
       },
     ]);
   });

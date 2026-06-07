@@ -33,8 +33,14 @@
       var link = document.createElement('a');
       link.className = 'doc-search-result';
       link.href = '/' + encodeURIComponent(result.file) + '?q=' + encodeURIComponent(input.value.trim());
+      var tags = Array.isArray(result.tags) && result.tags.length
+        ? '<span class="doc-search-tags">' + result.tags.map(function (tag) {
+          return '<span class="doc-search-tag">' + escapeHtml(tag) + '</span>';
+        }).join('') + '</span>'
+        : '';
       link.innerHTML = '<span class="doc-search-title">' + escapeHtml(result.title) + '</span>' +
         '<span class="doc-search-meta">' + escapeHtml(result.file) + ':' + result.line + '</span>' +
+        tags +
         '<span class="doc-search-snippet">' + escapeHtml(result.snippet) + '</span>';
       resultsEl.appendChild(link);
     }
