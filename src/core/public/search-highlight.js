@@ -45,7 +45,15 @@
     runHighlight();
   };
 
+  function focusLineTarget() {
+    if (!/^#L\d+$/.test(window.location.hash || '')) return;
+    var target = document.getElementById(window.location.hash.slice(1));
+    if (!target || !target.classList.contains('doc-search-line-target')) return;
+    target.classList.add('line-target-active');
+  }
+
   function runHighlight() {
+    focusLineTarget();
     var textNode = findTextNode(root);
     var mark = textNode ? highlight(textNode) : null;
     if (mark) {
