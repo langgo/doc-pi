@@ -28,6 +28,26 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('supports keyboard navigation for recent sidebar searches', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.setItem('doc-pi:recent-searches', JSON.stringify(['footnote'])));
+      await page.focus('.doc-search-input');
+      await page.waitForSelector('.doc-search-recent-item');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-recent-item'));
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-input'));
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === 'footnote');
+      await page.waitForSelector('.doc-search-result');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('clears recent sidebar searches without changing the current input', async () => {
     const page = await browser.newPage();
     try {
