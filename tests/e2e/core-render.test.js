@@ -1011,6 +1011,39 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows disabled bottom chapter navigation edge states', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/README.md');
+      await page.waitForSelector('.markdown-content .chapter-nav-bottom');
+      const firstNav = await page.$eval('.markdown-content .chapter-nav-bottom', el => ({
+        disabledPrevText: el.querySelector('.nav-prev.nav-disabled')?.textContent,
+        disabledPrevAria: el.querySelector('.nav-prev.nav-disabled')?.getAttribute('aria-disabled'),
+        disabledPrevHref: el.querySelector('.nav-prev.nav-disabled')?.getAttribute('href'),
+        next: el.querySelector('.nav-next:not(.nav-disabled)')?.getAttribute('href'),
+      }));
+      expect(firstNav.disabledPrevText).toContain('已是第一章');
+      expect(firstNav.disabledPrevAria).toBe('true');
+      expect(firstNav.disabledPrevHref).toBe(null);
+      expect(firstNav.next).toBe('/rich-markdown.md');
+
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForSelector('.markdown-content .chapter-nav-bottom');
+      const lastNav = await page.$eval('.markdown-content .chapter-nav-bottom', el => ({
+        prev: el.querySelector('.nav-prev:not(.nav-disabled)')?.getAttribute('href'),
+        disabledNextText: el.querySelector('.nav-next.nav-disabled')?.textContent,
+        disabledNextAria: el.querySelector('.nav-next.nav-disabled')?.getAttribute('aria-disabled'),
+        disabledNextHref: el.querySelector('.nav-next.nav-disabled')?.getAttribute('href'),
+      }));
+      expect(lastNav.prev).toBe('/rich-markdown.md');
+      expect(lastNav.disabledNextText).toContain('已是最后一章');
+      expect(lastNav.disabledNextAria).toBe('true');
+      expect(lastNav.disabledNextHref).toBe(null);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows bottom chapter navigation for adjacent markdown files', async () => {
     const page = await browser.newPage();
     try {

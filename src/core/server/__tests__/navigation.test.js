@@ -70,6 +70,17 @@ describe('navigation', () => {
     it('should return empty string for single chapter', () => {
       expect(getChapterNav('01-概述.md', ['01-概述.md'])).toBe('');
     });
+
+    it('should show disabled edge states in bottom navigation', () => {
+      const firstNav = getChapterNav('01-概述.md', chapters, { position: 'bottom', withLabels: true });
+      const lastNav = getChapterNav('03-使用指南.md', chapters, { position: 'bottom', withLabels: true });
+      expect(firstNav).toContain('class="nav-prev nav-disabled"');
+      expect(firstNav).toContain('aria-disabled="true"');
+      expect(firstNav).toContain('已是第一章');
+      expect(lastNav).toContain('class="nav-next nav-disabled"');
+      expect(lastNav).toContain('aria-disabled="true"');
+      expect(lastNav).toContain('已是最后一章');
+    });
   });
 
   describe('buildFileListToc', () => {
