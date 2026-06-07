@@ -11,7 +11,8 @@ import { renderHtml } from './core/server/render.js';
 import { stripBOM, extractToc, buildTocHtml, processMarkdown } from './core/server/markdown.js';
 import { getChapterFiles, getChapterNav, buildFileListToc } from './core/server/navigation.js';
 import { registerPlugin, resetPlugins, tryPluginApiRoutes, collectPluginInjections } from './core/server/plugins.js';
-import { resolveSafePath, serveStatic } from './core/server/server.js';
+import { searchMarkdownFiles } from './core/server/search.js';
+import { json, resolveSafePath, serveStatic } from './core/server/server.js';
 import { setRuntimeConfig, getPackageSrcDir } from './core/server/runtime-state.js';
 import commentsPlugin from './plugins/comments/index.js';
 import createAiQaPlugin from './plugins/ai-qa/index.js';
@@ -49,6 +50,21 @@ export function createDocPiServer(runtimeConfig) {
 
     // Plugin API routes
     if (await tryPluginApiRoutes(req, res)) return;
+
+    if (url.startsWith('/api/search')) {
+      const searchUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
+      const query = searchUrl.searchParams.get('q') || '';
+      if (!query.trim()) {
+        json(res, 400, { error: 'q is required' });
+        return;
+      }
+      try {
+        json(res, 200, await searchMarkdownFiles(rootDir, query, { limit: 20 }));
+      } catch (err) {
+        json(res, 500, { error: err.message });
+      }
+      return;
+    }
 
     // Static files owned by the package, not by the configured content root.
     if (url.startsWith('/core/public/') || url.startsWith('/plugins/')) {

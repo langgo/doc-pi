@@ -88,6 +88,26 @@ describe('HTTP routing integration', () => {
     expect(contentType).toContain('application/javascript');
   });
 
+  it('GET /api/search should return markdown search results', async () => {
+    const res = await fetchUrl('/api/search?q=blockquote');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.query).toBe('blockquote');
+    expect(body.results).toContainEqual({
+      file: 'sample-chapter.md',
+      line: 18,
+      title: 'Sample Chapter for Testing',
+      snippet: '> A blockquote for testing.',
+    });
+  });
+
+  it('GET /api/search should reject missing queries', async () => {
+    const res = await fetchUrl('/api/search');
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('q is required');
+  });
+
   it('GET /nonexistent.md should return 404', async () => {
     const res = await fetchUrl('/nonexistent.md');
     expect(res.status).toBe(404);
