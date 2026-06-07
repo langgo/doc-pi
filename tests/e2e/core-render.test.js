@@ -613,6 +613,27 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('activates search line targets from keyboard-selected results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.fill('.doc-search-input', 'blockquote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-result'));
+      await page.keyboard.press('Enter');
+      await page.waitForURL(/sample-chapter\.md/);
+      expect(page.url()).toContain('q=blockquote');
+      expect(page.url()).toContain('#L18');
+      await page.waitForSelector('.doc-search-line-target.line-target-active', { state: 'attached' });
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(true);
+      await page.waitForSelector('.doc-search-hit', { state: 'attached' });
+      expect(await page.$eval('.doc-search-hit', el => el.textContent.toLowerCase())).toBe('blockquote');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('searches markdown content from the sidebar', async () => {
     const page = await browser.newPage();
     try {
