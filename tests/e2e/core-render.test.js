@@ -38,12 +38,43 @@ describe('Core render E2E', () => {
         window.scrollTo(0, 520);
       });
       await page.waitForFunction(() => window.scrollY >= 500);
-      await page.waitForTimeout(180);
+      await page.waitForFunction(() => localStorage.getItem('doc-pi:reading-position:/rich-markdown.md') !== null);
       await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
       await page.waitForFunction(() => window.scrollY <= 5);
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
       await page.waitForFunction(() => window.scrollY >= 500);
       expect(await page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(500);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('clamps stale reading positions to the current chapter height', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await page.addInitScript(() => {
+        localStorage.setItem('doc-pi:reading-position:/sample-chapter.md', '999999');
+        window.__docPiScrollToCalls = [];
+        const originalScrollTo = window.scrollTo.bind(window);
+        window.scrollTo = function (x, y) {
+          const top = typeof x === 'object' ? x.top : y;
+          window.__docPiScrollToCalls.push(top);
+          return originalScrollTo(x, y);
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForFunction(() => window.__docPiScrollToCalls?.length > 0);
+      const state = await page.evaluate(() => {
+        const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        return {
+          maxScroll,
+          attemptedTop: window.__docPiScrollToCalls[0],
+          scrollY: window.scrollY,
+        };
+      });
+      expect(state.attemptedTop).toBe(state.maxScroll);
+      expect(state.scrollY).toBeLessThanOrEqual(state.maxScroll);
     } finally {
       await page.close();
     }
