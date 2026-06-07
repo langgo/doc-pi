@@ -49,6 +49,25 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('supports reader keyboard shortcuts without hijacking text input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.keyboard.press('/');
+      const focusedClass = await page.evaluate(() => document.activeElement?.className || '');
+      expect(focusedClass).toContain('doc-search-input');
+      await page.keyboard.type('blockquote');
+      await page.waitForSelector('.doc-search-result');
+      await page.keyboard.press('Escape');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      await page.fill('.doc-search-input', 'literal ] text');
+      await page.keyboard.press(']');
+      expect(page.url()).toContain('/sample-chapter.md');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('copies full heading links when clicking heading anchors', async () => {
     const page = await browser.newPage();
     try {
