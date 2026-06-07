@@ -1,6 +1,8 @@
 # Rich Markdown Fixture
 
-This fixture covers rich markdown rendering.
+This fixture covers rich markdown rendering with a footnote.[^1]
+
+[^1]: Footnote content for rendering.
 
 ## Code
 

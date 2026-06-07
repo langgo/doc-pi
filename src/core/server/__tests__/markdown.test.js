@@ -100,6 +100,26 @@ describe('markdown', () => {
       expect(html).toContain('<h');
     });
 
+    it('should render markdown footnotes with backlinks', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-footnotes.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, 'Text with note.[^1]\n\n[^1]: Footnote content.\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('class="footnote-ref"');
+        expect(html).toContain('id="fnref-1"');
+        expect(html).toContain('href="#fn-1"');
+        expect(html).toContain('<section class="footnotes">');
+        expect(html).toContain('id="fn-1"');
+        expect(html).toContain('Footnote content.');
+        expect(html).toContain('class="footnote-backref"');
+        expect(html).toContain('href="#fnref-1"');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
     it('should secure external links without changing local or hash links', async () => {
       const fs = await import('fs/promises');
       const tmpPath = path.join(ROOT_DIR, 'data', 'test-link-safety.md');

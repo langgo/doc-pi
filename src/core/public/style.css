@@ -548,6 +548,30 @@ body {
   border: 0;
 }
 
+.footnote-ref {
+  font-size: 0.75em;
+  line-height: 1;
+}
+
+.footnotes {
+  margin-top: 2rem;
+  color: #57606a;
+  font-size: 0.875rem;
+}
+
+.footnotes ol {
+  padding-left: 1.5rem;
+}
+
+.footnotes li:target {
+  background: #fff8c5;
+}
+
+.footnote-backref {
+  margin-left: 0.25rem;
+  text-decoration: none;
+}
+
 /* Shared article source highlight */
 .core-source-highlight {
   background: #fff3b0;

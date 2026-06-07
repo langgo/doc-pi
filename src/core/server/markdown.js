@@ -58,6 +58,37 @@ export function buildTocHtml(headings, currentFile) {
   return html;
 }
 
+function extractFootnotes(mdContent) {
+  const footnotes = [];
+  const withoutDefinitions = mdContent.replace(/^\[\^([^\]]+)\]:\s+(.+)$/gm, (_, id, content) => {
+    footnotes.push({ id: id.trim(), content: content.trim() });
+    return '';
+  });
+  return { mdContent: withoutDefinitions, footnotes };
+}
+
+function renderFootnoteRefs(html, footnotes) {
+  if (!footnotes.length) return html;
+  const known = new Set(footnotes.map(footnote => footnote.id));
+  return html.replace(/\[\^([^\]]+)\]/g, (match, id) => {
+    const safeId = slugify(id);
+    if (!known.has(id)) return match;
+    return '<sup><a class="footnote-ref" id="fnref-' + safeId + '" href="#fn-' + safeId + '">' + escapeHtml(id) + '</a></sup>';
+  });
+}
+
+function appendFootnotes(html, footnotes) {
+  if (!footnotes.length) return html;
+  let list = '<section class="footnotes"><hr><ol>';
+  for (const footnote of footnotes) {
+    const safeId = slugify(footnote.id);
+    const content = secureExternalLinks(marked(footnote.content).trim());
+    list += '<li id="fn-' + safeId + '">' + content + ' <a class="footnote-backref" href="#fnref-' + safeId + '" aria-label="返回脚注引用">↩</a></li>';
+  }
+  list += '</ol></section>';
+  return html + list;
+}
+
 function secureExternalLinks(html) {
   return html.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
     const hrefMatch = attrs.match(/\s+href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
@@ -75,6 +106,10 @@ function secureExternalLinks(html) {
 export async function processMarkdown(filePath) {
   let mdContent = await readFile(filePath, 'utf-8');
   mdContent = stripBOM(mdContent);
+
+  const footnoteResult = extractFootnotes(mdContent);
+  mdContent = footnoteResult.mdContent;
+  const footnotes = footnoteResult.footnotes;
 
   // Replace mermaid blocks with placeholders before marked processing
   const mermaidBlocks = [];
@@ -168,6 +203,9 @@ export async function processMarkdown(filePath) {
     const code = mermaidBlocks[parseInt(idx)];
     return `<div class="mermaid-container"><div class="mermaid">${code}</div></div>`;
   });
+
+  html = renderFootnoteRefs(html, footnotes);
+  html = appendFootnotes(html, footnotes);
 
   // Render display math blocks server-side with KaTeX
   html = html.replace(/<!--MATH_(\d+)-->/g, (_, idx) => {
