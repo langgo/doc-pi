@@ -49,6 +49,29 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('copies full heading links when clicking heading anchors', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        window.__copiedText = null;
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: async text => { window.__copiedText = text; },
+          },
+        });
+      });
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.click('.markdown-content h1 .heading-anchor');
+      const copied = await page.evaluate(() => window.__copiedText);
+      expect(copied).toBe(`${server.baseUrl}/sample-chapter.md#sample-chapter-for-testing`);
+      const label = await page.$eval('.markdown-content h1 .heading-anchor', el => el.getAttribute('aria-label'));
+      expect(label).toBe('Copied heading link');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('renders copyable heading anchor links', async () => {
     const page = await browser.newPage();
     try {
