@@ -6,6 +6,7 @@ import boxen from 'boxen';
 import gradient from 'gradient-string';
 import { fileURLToPath } from 'url';
 import { loadRuntimeConfig } from './runtime/config.js';
+import { printRuntimeDiagnostics, validateRuntimeConfig } from './runtime/diagnostics.js';
 import { renderHtml } from './core/server/render.js';
 import { stripBOM, extractToc, buildTocHtml, processMarkdown } from './core/server/markdown.js';
 import { getChapterFiles, getChapterNav, buildFileListToc } from './core/server/navigation.js';
@@ -148,6 +149,7 @@ function tryListen(server, port) {
 
 export async function startServer(runtimeConfig) {
   const config = setRuntimeConfig(runtimeConfig);
+  printRuntimeDiagnostics(await validateRuntimeConfig(config));
 
   resetPlugins();
   if (config.comments.enabled !== false) {
