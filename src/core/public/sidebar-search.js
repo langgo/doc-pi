@@ -503,6 +503,14 @@
     }, 120);
   });
 
+  window.addEventListener('popstate', function () {
+    var query = new URL(window.location.href).searchParams.get('q') || '';
+    input.value = query;
+    setClearVisible(query);
+    if (query) runSearch(query);
+    else clearSearch();
+  });
+
   var initialQuery = new URL(window.location.href).searchParams.get('q') || '';
   if (initialQuery) {
     input.value = initialQuery;

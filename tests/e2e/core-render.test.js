@@ -28,6 +28,25 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('syncs sidebar search when browser history removes URL query', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md?q=footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.evaluate(() => {
+        window.history.pushState(window.history.state, '', window.location.pathname);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === '');
+      expect(new URL(page.url()).searchParams.get('q')).toBe(null);
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+      expect(await page.$eval('.doc-search-count', el => el.hidden)).toBe(true);
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('does not run a pending debounced search after clearing input', async () => {
     const page = await browser.newPage();
     try {
