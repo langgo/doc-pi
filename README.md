@@ -1,16 +1,15 @@
 # doc-pi
 
-`doc-pi` is a CLI document server for Markdown book projects. It serves a content directory with chapter navigation, rendered/source views, Mermaid and KaTeX support, comments, and optional AI QA powered by an OMP agent configuration.
+`doc-pi` is a Bun-based CLI document server for Markdown book projects. It serves a content directory with chapter navigation, rendered/source views, Mermaid and KaTeX support, comments, and optional AI QA powered by an OMP agent configuration.
 
 ## Requirements
 
-- Node.js `>= 20.0.0`
+- Bun `>= 1.3.0`
 - A Markdown content directory. `README.md` is used as the home page when present.
-- Bun is optional. It can install and run development scripts, but the published CLI itself runs on Node.
 
 ## Install
 
-`doc-pi` runs on Node. npm and Bun are both supported as package installers; choose whichever fits your workflow.
+`doc-pi` is distributed as a Bun-powered CLI. npm and Bun are both supported as package installers, but the installed command itself requires Bun on `PATH` because the executable starts with `#!/usr/bin/env bun`.
 
 ### From npm registry
 
@@ -68,7 +67,7 @@ Equivalent npm local install from the checkout:
 ```bash
 git clone https://github.com/langgo/doc-pi.git
 cd doc-pi
-npm install
+bun install
 npm install -g .
 doc-pi --root ./docs
 ```
@@ -100,7 +99,6 @@ doc-pi --root ./docs --no-ai-qa
 For development without linking:
 
 ```bash
-node bin/doc-pi.js --root ./docs --port 3000
 bun run bin/doc-pi.js --root ./docs --port 3000
 ```
 
@@ -180,14 +178,8 @@ Use `--comments-data-dir` when a project wants comments outside the content tree
 ## Development
 
 ```bash
-npm install
-npm run start
-```
-
-Tests currently use Bun's test runner:
-
-```bash
 bun install
+bun run start
 bun run test:all
 ```
 
@@ -195,8 +187,8 @@ Useful scripts:
 
 |Script|Description|
 |---|---|
-|`npm run start` / `bun run start`|Run the CLI from the current checkout with Node|
-|`npm run dev` / `bun run dev`|Run the CLI in Node watch mode|
+|`bun run start`|Run the CLI from the current checkout|
+|`bun run dev`|Run the CLI in watch mode|
 |`bun run test`|Run server/unit tests|
 |`bun run test:integration`|Run integration API tests|
 |`bun run test:e2e`|Run browser E2E tests|

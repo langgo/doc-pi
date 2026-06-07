@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { loadRuntimeConfig } from '../src/runtime/config.js';
 import { startServer } from '../src/server.js';
 

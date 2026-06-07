@@ -16,6 +16,7 @@
 //   - History replay for persistent conversations
 
 import path from 'path';
+import { createAgentSession, SessionManager, AuthStorage, ModelRegistry } from '@oh-my-pi/pi-coding-agent';
 import { getContentRoot } from '../../../core/server/runtime-state.js';
 import { getChapterFiles } from '../../../core/server/navigation.js';
 import * as historyStore from './history-store.js';
@@ -29,17 +30,6 @@ const runtimeSessions = new Map();
 let sdkAvailable = true;
 let agentDir = null;
 let persistThinking = false;
-let sdkModulePromise = null;
-
-async function loadAgentSdk() {
-  if (!sdkModulePromise) {
-    sdkModulePromise = import('@oh-my-pi/pi-coding-agent').catch((err) => {
-      sdkModulePromise = null;
-      throw err;
-    });
-  }
-  return sdkModulePromise;
-}
 
 // For testing: reset internal state
 export function resetForTesting() {
@@ -52,7 +42,6 @@ export function resetForTesting() {
   sdkAvailable = true;
   agentDir = null;
   persistThinking = false;
-  sdkModulePromise = null;
 }
 
 /**
@@ -128,21 +117,13 @@ async function createRuntimeSession(conversationId, historyMessages) {
 
   const chapterFiles = await getChapterFiles();
 
-  let sdk;
-  try {
-    sdk = await loadAgentSdk();
-  } catch (err) {
-    sdkAvailable = false;
-    throw new Error(`AI 问答暂不可用: ${err.message}`);
-  }
-
-  const authStorage = await sdk.AuthStorage.create(path.join(agentDir, 'agent.db'));
-  const modelRegistry = new sdk.ModelRegistry(authStorage, path.join(agentDir, 'models.yml'));
+  const authStorage = await AuthStorage.create(path.join(agentDir, 'agent.db'));
+  const modelRegistry = new ModelRegistry(authStorage, path.join(agentDir, 'models.yml'));
 
   let agentResult;
   try {
-    agentResult = await sdk.createAgentSession({
-      sessionManager: sdk.SessionManager.inMemory(),
+    agentResult = await createAgentSession({
+      sessionManager: SessionManager.inMemory(),
       toolNames: ['read', 'web_search'],
       enableMCP: false,
       enableLsp: false,
