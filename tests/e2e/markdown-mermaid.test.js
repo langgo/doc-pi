@@ -42,6 +42,26 @@ describe('Markdown and Mermaid E2E', () => {
     }
   });
 
+  it('renders footnote references and backlinks', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.footnote-ref');
+      const state = await page.evaluate(() => ({
+        refHref: document.querySelector('.footnote-ref')?.getAttribute('href'),
+        refId: document.querySelector('.footnote-ref')?.getAttribute('id'),
+        footnotesText: document.querySelector('.footnotes')?.textContent,
+        backlinkHref: document.querySelector('.footnote-backref')?.getAttribute('href'),
+      }));
+      expect(state.refHref).toBe('#fn-1');
+      expect(state.refId).toBe('fnref-1');
+      expect(state.footnotesText).toContain('Footnote content for rendering.');
+      expect(state.backlinkHref).toBe('#fnref-1');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('renders task lists as read-only aligned checkboxes', async () => {
     const page = await browser.newPage();
     try {
