@@ -28,6 +28,26 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows recent sidebar searches and reruns them on click', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.clear());
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.click('.doc-search-clear');
+      await page.focus('.doc-search-input');
+      await page.waitForSelector('.doc-search-recent-item');
+      expect(await page.$$eval('.doc-search-recent-item', items => items.map(item => item.textContent))).toEqual(['footnote']);
+      await page.click('.doc-search-recent-item');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$$('.doc-search-recent-item')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('shows helpful empty state for sidebar searches without results', async () => {
     const page = await browser.newPage();
     try {
