@@ -699,6 +699,60 @@ body {
 
 .hljs { background: transparent !important; }
 
+/* Print */
+@media print {
+  .sidebar,
+  .floating-actions,
+  .reading-progress,
+  .back-to-top,
+  .core-panel,
+  .selection-popup,
+  .lightbox,
+  .heading-anchor {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .app {
+    display: block;
+    min-height: auto;
+  }
+
+  .main {
+    margin-left: 0 !important;
+    max-width: none !important;
+    min-height: auto;
+  }
+
+  .content-wrap {
+    max-width: none;
+    padding: 0;
+  }
+
+  .markdown-content {
+    max-width: none;
+    padding: 0;
+  }
+
+  .markdown-content a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #57606a;
+  }
+
+  pre,
+  blockquote,
+  table,
+  img,
+  svg {
+    break-inside: avoid;
+  }
+}
+
 /* Chapter navigation */
 .chapter-nav {
   display: flex;
