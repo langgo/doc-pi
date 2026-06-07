@@ -634,6 +634,32 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('clears keyboard-created search presentation with Escape', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.fill('.doc-search-input', 'blockquote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-result'));
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => location.hash === '#L18');
+      await page.waitForSelector('.doc-search-line-target.line-target-active', { state: 'attached' });
+      await page.waitForSelector('.doc-search-hit', { state: 'attached' });
+      await page.focus('.doc-search-input');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !new URL(location.href).searchParams.has('q') && location.hash === '');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+      expect(await page.$eval('#L18', el => el.classList.contains('line-target-active'))).toBe(false);
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(false);
+      expect(await page.$$('.doc-search-hit')).toHaveLength(0);
+      expect(await page.$eval('.markdown-content', el => el.textContent.includes('A blockquote for testing.'))).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('searches markdown content from the sidebar', async () => {
     const page = await browser.newPage();
     try {
