@@ -10,8 +10,8 @@ let noAiServerProcess;
 let tmpRoot;
 let agentDir;
 let historyDir;
-const ENABLED_BASE_URL = 'http://localhost:3099';
-const NO_AI_BASE_URL = 'http://localhost:3097';
+const ENABLED_BASE_URL = 'http://localhost:13002';
+const NO_AI_BASE_URL = 'http://localhost:13003';
 const FIXTURE_ROOT = path.join(ROOT_DIR, 'tests', 'fixtures');
 const CONTENT_DEFAULT_HISTORY_FILE = path.join(FIXTURE_ROOT, 'data', 'ai-qa', 'sessions.json');
 const PACKAGE_DEFAULT_HISTORY_FILE = path.join(ROOT_DIR, 'data', 'ai-qa', 'sessions.json');
@@ -55,7 +55,7 @@ beforeAll(async () => {
     historyDir,
   ], {
     cwd: ROOT_DIR,
-    env: { ...process.env, PORT: '3099' },
+    env: { ...process.env, PORT: '13002' },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -71,7 +71,7 @@ beforeAll(async () => {
     '--no-ai-qa',
   ], {
     cwd: ROOT_DIR,
-    env: { ...process.env, PORT: '3097' },
+    env: { ...process.env, PORT: '13003' },
     stdout: 'pipe',
     stderr: 'pipe',
   });

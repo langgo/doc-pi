@@ -7,7 +7,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const FIXTURE_ROOT = path.join(PROJECT_ROOT, 'tests', 'fixtures');
 
 let serverProcess;
-const BASE_URL = 'http://localhost:3099';
+const BASE_URL = 'http://localhost:13000';
 
 function fetchUrl(path) {
   return fetch(`${BASE_URL}${path}`);
@@ -16,7 +16,7 @@ function fetchUrl(path) {
 beforeAll(async () => {
   serverProcess = Bun.spawn(['bun', 'run', 'src/server.js', '--root', FIXTURE_ROOT], {
     cwd: PROJECT_ROOT,
-    env: { ...process.env, PORT: '3099' },
+    env: { ...process.env, PORT: '13000' },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -28,7 +28,7 @@ beforeAll(async () => {
     } catch {}
     await new Promise(r => setTimeout(r, 300));
   }
-  throw new Error('Server failed to start on port 3099');
+  throw new Error('Server failed to start on port 13000');
 }, 30000);
 
 afterAll(() => {

@@ -27,7 +27,7 @@ describe('AI QA plugin registration', () => {
       await withServer({
         rootDir: tmpRoot,
         root: tmpRoot,
-        port: 0,
+        port: 13010,
         siteTitle: 'Test Docs',
         aiQa: {
           enabled: true,
@@ -59,7 +59,7 @@ describe('AI QA plugin registration', () => {
       await withServer({
         rootDir: tmpRoot,
         root: tmpRoot,
-        port: 0,
+        port: 13010,
         siteTitle: 'Test Docs',
         aiQa: {
           enabled: false,
@@ -87,7 +87,7 @@ describe('AI QA plugin registration', () => {
       await withServer({
         rootDir: tmpRoot,
         root: tmpRoot,
-        port: 0,
+        port: 13010,
         siteTitle: 'Test Docs',
         aiQa: {
           enabled: true,

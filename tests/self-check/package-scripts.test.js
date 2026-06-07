@@ -30,6 +30,20 @@ describe('package verification scripts', () => {
     expect(pkg.scripts['test:all']).toContain('bun run test:e2e');
     expect(pkg.scripts['test:all']).toContain('bun run test:self-check');
   });
+
+  it('test:all server suites should avoid primary 3000-series ports', async () => {
+    const integrationFiles = [
+      'tests/integration/server.test.js',
+      'tests/integration/comments-api.test.js',
+      'tests/integration/ai-qa-api.test.js',
+    ];
+    for (const file of integrationFiles) {
+      const source = await readProjectFile(file);
+      expect(source).not.toMatch(/localhost:30\d{2}|PORT: '30\d{2}'/);
+      expect(source).toMatch(/localhost:130\d{2}/);
+      expect(source).toMatch(/PORT: '130\d{2}'/);
+    }
+  });
 });
 
 describe('core public module seams', () => {

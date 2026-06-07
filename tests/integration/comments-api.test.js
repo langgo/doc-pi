@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 let serverProcess;
 let tmpRoot;
 let commentsDir;
-const BASE_URL = 'http://localhost:3098';
+const BASE_URL = 'http://localhost:13001';
 const TEST_FILE = 'sample-chapter.md';
 const FIXTURE_ROOT = path.join(ROOT_DIR, 'tests', 'fixtures');
 const PACKAGE_DEFAULT_COMMENTS_DIR = path.join(ROOT_DIR, 'data', 'comments');
@@ -46,7 +46,7 @@ beforeAll(async () => {
     commentsDir,
   ], {
     cwd: ROOT_DIR,
-    env: { ...process.env, PORT: '3098' },
+    env: { ...process.env, PORT: '13001' },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -58,7 +58,7 @@ beforeAll(async () => {
     } catch {}
     await new Promise(r => setTimeout(r, 300));
   }
-  throw new Error('Server failed to start on port 3098');
+  throw new Error('Server failed to start on port 13001');
 }, 30000);
 
 afterAll(async () => {
