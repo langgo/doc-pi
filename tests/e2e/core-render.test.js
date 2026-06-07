@@ -28,6 +28,23 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('searches markdown content from the sidebar', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.fill('.doc-search-input', 'blockquote');
+      await page.waitForSelector('.doc-search-result');
+      const resultText = await page.$eval('.doc-search-result', el => el.textContent);
+      expect(resultText).toContain('Sample Chapter for Testing');
+      expect(resultText).toContain('A blockquote for testing');
+      await page.click('.doc-search-result');
+      await page.waitForURL(/sample-chapter\.md/);
+      expect(page.url()).toContain('sample-chapter.md');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('loads chapter page with sidebar and markdown content', async () => {
     const page = await browser.newPage();
     try {
