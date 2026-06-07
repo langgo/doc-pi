@@ -54,10 +54,12 @@ export async function buildFileListToc(rootDir = getContentRoot(), currentFile =
   // Numbered chapters sorted by filename
   mdFiles.sort((a, b) => a.localeCompare(b));
   let html = '<ul>';
-  for (const f of mdFiles) {
+  for (let i = 0; i < mdFiles.length; i += 1) {
+    const f = mdFiles[i];
     const name = f.replace(/\.md$/, '');
     const activeClass = f === currentFile ? ' toc-current chapter-active' : '';
-    html += `<li><a href="/${f}" class="toc-h1${activeClass}">${escapeHtml(name)}</a></li>`;
+    const position = f === currentFile ? `<span class="toc-chapter-position" aria-label="当前第 ${i + 1} 章，共 ${mdFiles.length} 章">${i + 1}/${mdFiles.length}</span>` : '';
+    html += `<li><a href="/${f}" class="toc-h1${activeClass}"><span class="toc-chapter-title">${escapeHtml(name)}</span>${position}</a></li>`;
   }
   html += '</ul>';
   return html;
