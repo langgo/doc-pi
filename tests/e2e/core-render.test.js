@@ -28,6 +28,38 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows and clears sidebar search error state', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let failSearch = true;
+      await page.route('**/api/search?q=*', async route => {
+        if (failSearch) {
+          await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'forced failure' }) });
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-input-wrap.search-error');
+      expect(await page.$eval('.doc-search-input', el => el.getAttribute('aria-invalid'))).toBe('true');
+      expect(await page.$eval('.doc-search-status', el => el.textContent)).toContain('forced failure');
+      failSearch = false;
+      await page.fill('.doc-search-input', '');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-error'));
+      expect(await page.$eval('.doc-search-input', el => el.getAttribute('aria-invalid'))).toBe('false');
+      failSearch = true;
+      await page.fill('.doc-search-input', 'another failure');
+      await page.waitForSelector('.doc-search-input-wrap.search-error');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-error'));
+    } finally {
+      await page.close();
+    }
+  });
+
   it('toggles sidebar search help hints', async () => {
     const page = await browser.newPage();
     try {

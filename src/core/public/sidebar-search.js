@@ -37,6 +37,11 @@
     inputWrap.setAttribute('aria-busy', isLoading ? 'true' : 'false');
   }
 
+  function setErrorState(hasError) {
+    inputWrap.classList.toggle('search-error', Boolean(hasError));
+    input.setAttribute('aria-invalid', hasError ? 'true' : 'false');
+  }
+
   function setHelpVisible(visible) {
     helpEl.hidden = !visible;
     helpToggle.setAttribute('aria-expanded', visible ? 'true' : 'false');
@@ -47,6 +52,7 @@
     statusEl.textContent = message || '';
     setResultCount(0, false);
     setLoading(false);
+    setErrorState(false);
   }
 
   function escapeHtml(value) {
@@ -305,6 +311,7 @@
   async function runSearch(query) {
     var requestId = ++activeRequest;
     setClearVisible(query);
+    setErrorState(false);
     renderFilters(query);
     if (!query.trim()) {
       clearResults('');
@@ -320,6 +327,7 @@
       setLoading(false);
       if (!res.ok) {
         clearResults(body.error || '搜索失败');
+        setErrorState(true);
         return;
       }
       renderResults(body.results || []);
@@ -328,6 +336,7 @@
       if (requestId !== activeRequest) return;
       setLoading(false);
       clearResults('搜索失败: ' + err.message);
+      setErrorState(true);
     }
   }
 
