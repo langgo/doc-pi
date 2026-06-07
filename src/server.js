@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import { loadRuntimeConfig } from './runtime/config.js';
 import { printRuntimeDiagnostics, validateRuntimeConfig } from './runtime/diagnostics.js';
 import { renderHtml } from './core/server/render.js';
-import { stripBOM, extractToc, buildTocHtml, processMarkdown } from './core/server/markdown.js';
+import { stripBOM, extractToc, buildTocHtml, processMarkdown, extractFrontmatter } from './core/server/markdown.js';
 import { getChapterFiles, getChapterNav, buildFileListToc } from './core/server/navigation.js';
 import { registerPlugin, resetPlugins, tryPluginApiRoutes, collectPluginInjections } from './core/server/plugins.js';
 import { searchMarkdownFiles } from './core/server/search.js';
@@ -31,10 +31,12 @@ async function handleMarkdown(filePath, chapterFiles, pluginInjections) {
 
   let mdContent = await readFile(filePath, 'utf-8');
   mdContent = stripBOM(mdContent);
+  const frontmatterResult = extractFrontmatter(mdContent);
+  mdContent = frontmatterResult.mdContent;
   const headings = extractToc(mdContent);
   const tocHtml = await buildFileListToc(path.dirname(filePath), currentFile) + buildTocHtml(headings, currentFile);
 
-  const title = currentFile;
+  const title = frontmatterResult.metadata?.title || currentFile;
   const chapterNav = getChapterNav(currentFile, chapterFiles);
   const contentWithNav = chapterNav + html + chapterNav;
 

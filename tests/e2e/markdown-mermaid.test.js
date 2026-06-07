@@ -21,6 +21,7 @@ describe('Markdown and Mermaid E2E', () => {
     const page = await browser.newPage();
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      expect(await page.title()).toBe('Rich Metadata Title - Fixtures');
       expect(await page.$eval('.markdown-content h1', el => el.childNodes[0].textContent.trim())).toBe('Rich Markdown Fixture');
       const metadata = await page.$eval('.frontmatter-metadata', el => ({
         text: el.textContent,
