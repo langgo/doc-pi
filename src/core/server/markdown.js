@@ -74,21 +74,22 @@ export function extractFrontmatter(mdContent) {
   return { mdContent: mdContent.slice(end + 4).replace(/^\n+/, ''), metadata };
 }
 
-function estimateReadingMinutes(mdContent) {
+function analyzeReadingStats(mdContent) {
   const text = mdContent
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/<[^>]*>/g, ' ')
     .replace(/[#>*_`\[\]()|:-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!text) return 1;
+  if (!text) return { minutes: 1, count: 0 };
   const cjkCount = (text.match(/[\u4e00-\u9fff]/g) || []).length;
   const wordCount = (text.replace(/[\u4e00-\u9fff]/g, ' ').match(/[A-Za-z0-9]+/g) || []).length;
-  return Math.max(1, Math.ceil((cjkCount + wordCount) / 220));
+  const count = cjkCount + wordCount;
+  return { minutes: Math.max(1, Math.ceil(count / 220)), count };
 }
 
-function renderReadingTime(minutes) {
-  return '<div class="reading-time" aria-label="预计阅读时间 ' + minutes + ' 分钟">约 ' + minutes + ' 分钟阅读</div>';
+function renderReadingTime(stats) {
+  return '<div class="reading-time" aria-label="预计阅读时间 ' + stats.minutes + ' 分钟，约 ' + stats.count + ' 字">约 ' + stats.minutes + ' 分钟阅读 · ' + stats.count + ' 字</div>';
 }
 
 function renderFrontmatterMetadata(metadata) {
@@ -164,7 +165,7 @@ export async function processMarkdown(filePath) {
   const footnoteResult = extractFootnotes(mdContent);
   mdContent = footnoteResult.mdContent;
   const footnotes = footnoteResult.footnotes;
-  const readingMinutes = estimateReadingMinutes(mdContent);
+  const readingStats = analyzeReadingStats(mdContent);
 
   // Replace mermaid blocks with placeholders before marked processing
   const mermaidBlocks = [];
@@ -239,7 +240,7 @@ export async function processMarkdown(filePath) {
       return '<' + tag + safeAttrs + '>';
     });
 
-  html = renderReadingTime(readingMinutes) + renderFrontmatterMetadata(metadata) + html;
+  html = renderReadingTime(readingStats) + renderFrontmatterMetadata(metadata) + html;
   html = secureExternalLinks(html);
 
   // Add id attributes and self-links to headings for TOC anchor navigation.

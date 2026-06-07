@@ -22,8 +22,8 @@ describe('Core render E2E', () => {
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
       await page.waitForSelector('.reading-time');
-      expect(await page.$eval('.reading-time', el => el.textContent.trim())).toBe('约 1 分钟阅读');
-      expect(await page.$eval('.reading-time', el => el.getAttribute('aria-label'))).toBe('预计阅读时间 1 分钟');
+      expect(await page.$eval('.reading-time', el => el.textContent.trim())).toBe('约 1 分钟阅读 · 98 字');
+      expect(await page.$eval('.reading-time', el => el.getAttribute('aria-label'))).toBe('预计阅读时间 1 分钟，约 98 字');
     } finally {
       await page.close();
     }
