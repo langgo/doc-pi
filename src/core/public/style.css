@@ -678,7 +678,8 @@ body {
 }
 
 .chapter-nav-bottom span,
-.chapter-nav-bottom strong { display: block; }
+.chapter-nav-bottom strong,
+.chapter-nav-bottom em { display: block; }
 .chapter-nav-bottom span {
   color: #656d76;
   font-size: 0.75rem;
@@ -688,6 +689,12 @@ body {
   color: #0969da;
   font-size: 0.875rem;
   overflow-wrap: anywhere;
+}
+.chapter-nav-bottom em {
+  color: #656d76;
+  font-size: 0.6875rem;
+  font-style: normal;
+  margin-top: 0.125rem;
 }
 .chapter-nav-bottom .nav-next { text-align: right; margin-left: auto; }
 .chapter-nav-bottom a:hover strong,
