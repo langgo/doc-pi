@@ -671,10 +671,16 @@ body {
   padding-top: 1rem;
 }
 
+.chapter-nav-bottom a,
+.chapter-nav-bottom .nav-disabled {
+  max-width: 48%;
+}
 .chapter-nav-bottom a {
   color: #0969da;
   text-decoration: none;
-  max-width: 48%;
+}
+.chapter-nav-bottom .nav-disabled {
+  color: #656d76;
 }
 
 .chapter-nav-bottom span,
@@ -690,6 +696,7 @@ body {
   font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
+.chapter-nav-bottom .nav-disabled strong { color: #656d76; }
 .chapter-nav-bottom em {
   color: #656d76;
   font-size: 0.6875rem;
