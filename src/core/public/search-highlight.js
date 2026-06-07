@@ -45,7 +45,19 @@
     runHighlight();
   };
 
+  function clearLineTargets() {
+    document.querySelectorAll('.doc-search-line-target.line-target-active').forEach(function (target) {
+      target.classList.remove('line-target-active');
+    });
+    if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('doc-search-line-target')) {
+      document.activeElement.blur();
+    }
+  }
+
+  window.docPiClearSearchLineTargets = clearLineTargets;
+
   function focusLineTarget() {
+    clearLineTargets();
     if (!/^#L\d+$/.test(window.location.hash || '')) return;
     var target = document.getElementById(window.location.hash.slice(1));
     if (!target || !target.classList.contains('doc-search-line-target')) return;

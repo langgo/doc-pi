@@ -617,6 +617,10 @@ describe('Core render E2E', () => {
       await page.waitForSelector('.doc-search-hit', { state: 'attached' });
       const highlightedText = await page.$eval('.doc-search-hit', el => el.textContent);
       expect(highlightedText.toLowerCase()).toBe('blockquote');
+      await page.fill('.doc-search-input', '');
+      await page.waitForTimeout(150);
+      expect(await page.$eval('#L18', el => el.classList.contains('line-target-active'))).toBe(false);
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(false);
     } finally {
       await page.close();
     }

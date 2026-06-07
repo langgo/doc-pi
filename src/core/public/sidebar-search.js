@@ -278,6 +278,12 @@
   function clearSearch() {
     clearTimeout(timer);
     abortActiveSearch();
+    document.querySelectorAll('.doc-search-line-target.line-target-active').forEach(function (target) {
+      target.classList.remove('line-target-active');
+    });
+    if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('doc-search-line-target')) {
+      document.activeElement.blur();
+    }
     input.value = '';
     setClearVisible('');
     renderFilters('');
@@ -317,6 +323,7 @@
         event.stopPropagation();
         if (link.pathname === window.location.pathname) {
           setTimeout(function () {
+            if (typeof window.docPiClearSearchLineTargets === 'function') window.docPiClearSearchLineTargets();
             if (/^#L\d+$/.test(window.location.hash || '')) {
               var target = document.getElementById(window.location.hash.slice(1));
               if (target && target.classList.contains('doc-search-line-target')) {
@@ -537,6 +544,14 @@
 
   input.addEventListener('input', function () {
     var query = input.value;
+    if (!String(query || '').trim()) {
+      document.querySelectorAll('.doc-search-line-target.line-target-active').forEach(function (target) {
+        target.classList.remove('line-target-active');
+      });
+      if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('doc-search-line-target')) {
+        document.activeElement.blur();
+      }
+    }
     setClearVisible(query);
     syncUrl(query);
     clearTimeout(timer);
