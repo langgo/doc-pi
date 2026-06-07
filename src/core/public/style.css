@@ -188,7 +188,12 @@ body {
   background: #fff;
   border: 1px solid #d8dee4;
 }
-.doc-search-result:hover { border-color: #0969da; background: #ddf4ff; }
+.doc-search-result:hover,
+.doc-search-result.search-selected,
+.doc-search-result[aria-selected="true"] {
+  border-color: #0969da;
+  background: #ddf4ff;
+}
 .doc-search-title,
 .doc-search-meta,
 .doc-search-snippet {

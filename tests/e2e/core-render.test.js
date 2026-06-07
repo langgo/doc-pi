@@ -74,6 +74,27 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('marks the keyboard-focused sidebar search result as selected', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.querySelectorAll('.doc-search-result')[0]?.getAttribute('aria-selected') === 'true');
+      await page.keyboard.press('ArrowDown');
+      await page.waitForFunction(() => {
+        const results = document.querySelectorAll('.doc-search-result');
+        return results[0]?.getAttribute('aria-selected') === 'false' && results[1]?.getAttribute('aria-selected') === 'true';
+      });
+      await page.keyboard.press('ArrowUp');
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('.doc-search-result')).every(result => result.getAttribute('aria-selected') === 'false'));
+    } finally {
+      await page.close();
+    }
+  });
+
   it('supports keyboard navigation in sidebar search results', async () => {
     const page = await browser.newPage();
     try {

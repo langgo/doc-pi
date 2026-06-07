@@ -106,6 +106,15 @@
     return Array.prototype.slice.call(resultsEl.querySelectorAll('.doc-search-result'));
   }
 
+  function setSelectedResult(selected) {
+    var results = searchResults();
+    for (var i = 0; i < results.length; i += 1) {
+      var isSelected = results[i] === selected;
+      results[i].classList.toggle('search-selected', isSelected);
+      results[i].setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    }
+  }
+
   function clearSearch() {
     input.value = '';
     renderFilters('');
@@ -117,7 +126,9 @@
   function focusResult(index) {
     var results = searchResults();
     if (!results.length) return false;
-    results[Math.max(0, Math.min(index, results.length - 1))].focus();
+    var result = results[Math.max(0, Math.min(index, results.length - 1))];
+    result.focus();
+    setSelectedResult(result);
     return true;
   }
 
@@ -136,6 +147,7 @@
       var link = document.createElement('a');
       link.className = 'doc-search-result';
       link.tabIndex = -1;
+      link.setAttribute('aria-selected', 'false');
       link.href = '/' + encodeURIComponent(result.file) + '?q=' + encodeURIComponent(input.value.trim());
       link.innerHTML = '<span class="doc-search-title">' + escapeHtml(result.title) + '</span>' +
         '<span class="doc-search-meta">' + escapeHtml(result.file) + ':' + result.line + '</span>';
@@ -206,8 +218,10 @@
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault();
-      if (index <= 0) input.focus();
-      else focusResult(index - 1);
+      if (index <= 0) {
+        input.focus();
+        setSelectedResult(null);
+      } else focusResult(index - 1);
       return;
     }
     if (event.key === 'Escape') {
@@ -215,6 +229,15 @@
       clearSearch();
       input.focus();
     }
+  });
+
+  resultsEl.addEventListener('mouseover', function (event) {
+    var result = event.target.closest('.doc-search-result');
+    if (result) setSelectedResult(result);
+  });
+
+  resultsEl.addEventListener('mouseleave', function () {
+    if (!resultsEl.contains(document.activeElement)) setSelectedResult(null);
   });
 
   filtersEl.addEventListener('click', function (event) {
