@@ -49,6 +49,29 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('shows a back-to-top button after scrolling and returns to top', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.back-to-top', { state: 'attached' });
+      expect(await page.$eval('.back-to-top', el => el.hidden)).toBe(true);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForFunction(() => window.scrollY > 300 && !document.querySelector('.back-to-top')?.hidden);
+      const rect = await page.$eval('.back-to-top', el => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, bottom: r.bottom };
+      });
+      expect(rect.left).toBeGreaterThan(260);
+      expect(rect.right).toBeLessThanOrEqual(900);
+      await page.click('.back-to-top');
+      await page.waitForFunction(() => window.scrollY <= 5);
+      expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(5);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('updates reading progress while scrolling', async () => {
     const page = await browser.newPage();
     try {

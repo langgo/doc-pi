@@ -22,6 +22,25 @@ body {
   transition: width 0.08s linear;
 }
 
+.back-to-top {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 7rem;
+  z-index: 10000;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid #d0d7de;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0969da;
+  box-shadow: 0 8px 24px rgba(140, 149, 159, 0.22);
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.back-to-top:hover { background: #f6f8fa; border-color: #0969da; }
+.back-to-top[hidden] { display: none; }
+
 .app { display: flex; min-height: 100vh; }
 
 /* Sidebar */
