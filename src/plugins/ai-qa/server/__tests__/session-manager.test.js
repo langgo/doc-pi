@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
 
+let sdkImportCount = 0;
+let mockedSdk = null;
+
 // Capture the mock session so tests can access it
 let capturedSession = null;
 let createdAuthStorages = [];
@@ -50,7 +53,8 @@ class MockModelRegistry {
 
 // Mock the SDK before importing the module under test
 mock.module('@oh-my-pi/pi-coding-agent', () => {
-  return {
+  sdkImportCount += 1;
+  mockedSdk = {
     createAgentSession: mock(defaultFactory),
     SessionManager: {
       inMemory: mock(() => ({})),
@@ -58,9 +62,11 @@ mock.module('@oh-my-pi/pi-coding-agent', () => {
     AuthStorage: MockAuthStorage,
     ModelRegistry: MockModelRegistry,
   };
+  return mockedSdk;
 });
 
-import {
+const sessionManager = await import('../session-manager.js');
+const {
   askQuestion,
   disposeRuntimeSession,
   getRuntimeSessionCount,
@@ -69,8 +75,7 @@ import {
   resetForTesting,
   configure,
   historyStore,
-} from '../session-manager.js';
-import { createAgentSession } from '@oh-my-pi/pi-coding-agent';
+} = sessionManager;
 import { setRuntimeConfig } from '../../../../core/server/runtime-state.js';
 
 describe('session-manager', () => {
@@ -81,10 +86,17 @@ describe('session-manager', () => {
     capturedSession = null;
     createdAuthStorages = [];
     MockAuthStorage.create.mockClear();
-    createAgentSession.mockImplementation(defaultFactory);
+    if (mockedSdk) mockedSdk.createAgentSession.mockImplementation(defaultFactory);
   });
 
   describe('askQuestion', () => {
+    it('does not load the OMP SDK while only configuring the session manager', () => {
+      resetForTesting();
+      configure({ agentDir: '/tmp/test-agent' });
+
+      expect(sdkImportCount).toBe(0);
+    });
+
     it('passes auth storage and agent models.yml registry into runtime session creation', async () => {
       const stream = await askQuestion('conv-model', {
         question: 'test',
@@ -94,7 +106,7 @@ describe('session-manager', () => {
         chapterFile: '01-概述.md',
       });
 
-      const options = createAgentSession.mock.calls[0][0];
+      const options = mockedSdk.createAgentSession.mock.calls[0][0];
       expect(options.model).toBeUndefined();
       expect(options.authStorage).toBe(createdAuthStorages[0]);
       expect(options.modelRegistry.authStorage).toBe(createdAuthStorages[0]);
@@ -154,7 +166,7 @@ describe('session-manager', () => {
       for await (const _ of stream1) { /* drain */ }
 
       const firstSession = capturedSession;
-      createAgentSession.mockImplementation(defaultFactory); // reset for next call
+      mockedSdk.createAgentSession.mockImplementation(defaultFactory); // reset for next call
 
       const stream2 = await askQuestion('conv-3', {
         question: 'q2',
@@ -175,7 +187,7 @@ describe('session-manager', () => {
     it('should enforce max runtime session limit', async () => {
       // Track all created sessions so we can emit agent_end on each
       const allSessions = [];
-      createAgentSession.mockImplementation(() => {
+      mockedSdk.createAgentSession.mockImplementation(() => {
         const result = defaultFactory();
         allSessions.push(result.session);
         return result;
@@ -212,7 +224,7 @@ describe('session-manager', () => {
     });
 
     it('should mark SDK unavailable on creation failure', async () => {
-      createAgentSession.mockImplementation(async () => {
+      mockedSdk.createAgentSession.mockImplementation(async () => {
         throw new Error('SDK crash');
       });
 

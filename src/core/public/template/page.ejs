@@ -24,23 +24,10 @@
         <a href="/"><%- siteTitle %></a>
         <button class="sidebar-collapse-toggle" type="button" aria-label="折叠侧边栏" aria-expanded="true">⇤</button>
       </div>
-      <div class="doc-search" role="search">
-        <div class="doc-search-input-wrap">
-          <input class="doc-search-input" type="search" placeholder="搜索文档" aria-label="搜索文档" autocomplete="off">
-          <button class="doc-search-clear" type="button" aria-label="清空搜索" hidden>×</button>
-          <span class="doc-search-count" aria-label="0 个搜索结果" hidden>0</span>
-        </div>
-        <div class="doc-search-status" aria-live="polite"></div>
-        <button class="doc-search-help-toggle" type="button" aria-expanded="false" aria-controls="doc-search-help">?</button>
-        <div id="doc-search-help" class="doc-search-help" role="dialog" aria-label="搜索帮助" hidden>
-          <div>输入关键词搜索文档内容。</div>
-          <div>使用 <code>tag:&lt;name&gt;</code> 按标签过滤。</div>
-          <div>按 <kbd>/</kbd> 聚焦搜索，按 <kbd>↑/↓</kbd> 导航结果或最近搜索。</div>
-          <div>按 <kbd>Esc</kbd> 清空搜索或关闭帮助。</div>
-        </div>
-        <div class="doc-search-filters" aria-label="搜索过滤条件"></div>
-        <div class="doc-search-results"></div>
-      </div>
+      <button class="doc-search-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="doc-search-overlay">
+        <span class="doc-search-open-text">搜索文档</span>
+        <kbd>/</kbd>
+      </button>
       <nav class="toc-nav">
         <%- tocHtml %>
       </nav>
@@ -71,6 +58,28 @@
     <div class="main">
       <div class="content-wrap">
         <div id="view-rendered" class="markdown-content"><%- content %></div>
+      </div>
+    </div>
+  </div>
+  <div id="doc-search-overlay" class="doc-search-overlay" role="dialog" aria-modal="true" aria-label="搜索文档" hidden>
+    <button class="doc-search-backdrop" type="button" aria-label="关闭搜索"></button>
+    <div class="doc-search-dialog">
+      <div class="doc-search" role="search">
+        <div class="doc-search-input-wrap">
+          <input class="doc-search-input" type="text" placeholder="搜索文档" aria-label="搜索文档" autocomplete="off" inputmode="search" enterkeyhint="search">
+          <button class="doc-search-clear" type="button" aria-label="清空搜索" hidden>×</button>
+          <span class="doc-search-count" aria-label="0 个搜索结果" hidden>0</span>
+        </div>
+        <div class="doc-search-status" aria-live="polite"></div>
+        <button class="doc-search-help-toggle" type="button" aria-expanded="false" aria-controls="doc-search-help">?</button>
+        <div id="doc-search-help" class="doc-search-help" role="dialog" aria-label="搜索帮助" hidden>
+          <div>输入关键词搜索文档内容。</div>
+          <div>使用 <code>tag:&lt;name&gt;</code> 按标签过滤。</div>
+          <div>按 <kbd>/</kbd> 打开搜索，按 <kbd>↑/↓</kbd> 导航结果或最近搜索。</div>
+          <div>按 <kbd>Esc</kbd> 清空搜索或关闭搜索。</div>
+        </div>
+        <div class="doc-search-filters" aria-label="搜索过滤条件"></div>
+        <div class="doc-search-results"></div>
       </div>
     </div>
   </div>

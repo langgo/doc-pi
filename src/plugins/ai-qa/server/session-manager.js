@@ -16,7 +16,6 @@
 //   - History replay for persistent conversations
 
 import path from 'path';
-import { createAgentSession, SessionManager, AuthStorage, ModelRegistry } from '@oh-my-pi/pi-coding-agent';
 import { getContentRoot } from '../../../core/server/runtime-state.js';
 import { getChapterFiles } from '../../../core/server/navigation.js';
 import * as historyStore from './history-store.js';
@@ -30,6 +29,12 @@ const runtimeSessions = new Map();
 let sdkAvailable = true;
 let agentDir = null;
 let persistThinking = false;
+let sdkPromise = null;
+
+async function loadSdk() {
+  if (!sdkPromise) sdkPromise = import('@oh-my-pi/pi-coding-agent');
+  return sdkPromise;
+}
 
 // For testing: reset internal state
 export function resetForTesting() {
@@ -42,6 +47,7 @@ export function resetForTesting() {
   sdkAvailable = true;
   agentDir = null;
   persistThinking = false;
+  sdkPromise = null;
 }
 
 /**
@@ -117,6 +123,7 @@ async function createRuntimeSession(conversationId, historyMessages) {
 
   const chapterFiles = await getChapterFiles();
 
+  const { createAgentSession, SessionManager, AuthStorage, ModelRegistry } = await loadSdk();
   const authStorage = await AuthStorage.create(path.join(agentDir, 'agent.db'));
   const modelRegistry = new ModelRegistry(authStorage, path.join(agentDir, 'models.yml'));
 

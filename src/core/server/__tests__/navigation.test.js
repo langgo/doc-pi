@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import { tmpdir } from 'os';
-import { getChapterFiles, getChapterNav, buildFileListToc } from '../navigation.js';
+import { getChapterFiles, getChapterNav, getChapterPosition, buildFileListToc } from '../navigation.js';
 
 let fixtureRoot;
 
@@ -87,6 +87,12 @@ describe('navigation', () => {
       expect(nav).toContain('class="chapter-nav-position"');
       expect(nav).toContain('aria-label="当前第 2 章，共 3 章"');
       expect(nav).toContain('第 2 / 3 章');
+    });
+
+    it('should exclude README from reader chapter positions', () => {
+      const chapters = ['README.md', '01-概述.md', '02-核心概念.md'];
+      expect(getChapterPosition('02-核心概念.md', chapters)).toContain('第 2 / 2 章');
+      expect(getChapterPosition('02-核心概念.md', chapters)).toContain('aria-label="当前第 2 章，共 2 章"');
     });
   });
 

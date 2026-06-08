@@ -1,4 +1,7 @@
 (function () {
+  var openButton = document.querySelector('.doc-search-open');
+  var overlay = document.querySelector('.doc-search-overlay');
+  var backdrop = document.querySelector('.doc-search-backdrop');
   var inputWrap = document.querySelector('.doc-search-input-wrap');
   var input = document.querySelector('.doc-search-input');
   var clearButton = document.querySelector('.doc-search-clear');
@@ -8,12 +11,38 @@
   var helpEl = document.querySelector('.doc-search-help');
   var filtersEl = document.querySelector('.doc-search-filters');
   var resultsEl = document.querySelector('.doc-search-results');
-  if (!inputWrap || !input || !clearButton || !countEl || !statusEl || !helpToggle || !helpEl || !filtersEl || !resultsEl) return;
+  if (!openButton || !overlay || !backdrop || !inputWrap || !input || !clearButton || !countEl || !statusEl || !helpToggle || !helpEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
   var activeSearchController = null;
   var timer = null;
   var recentStorageKey = 'doc-pi:recent-searches';
+  var composingSearch = false;
+  var lastFocusBeforeOpen = null;
+
+  window.docPiOpenSearch = openSearchOverlay;
+
+  function openSearchOverlay() {
+    if (overlay.hidden) lastFocusBeforeOpen = document.activeElement;
+    overlay.hidden = false;
+    openButton.setAttribute('aria-expanded', 'true');
+    input.focus();
+    input.select();
+    renderRecentSearches();
+  }
+
+  function closeSearchOverlay(restoreFocus) {
+    overlay.hidden = true;
+    openButton.setAttribute('aria-expanded', 'false');
+    setHelpVisible(false);
+    setSelectedResult(null);
+    setSelectedRecent(null);
+    if (restoreFocus !== false && lastFocusBeforeOpen && typeof lastFocusBeforeOpen.focus === 'function') {
+      lastFocusBeforeOpen.focus();
+    } else if (restoreFocus !== false) {
+      openButton.focus();
+    }
+  }
 
   function syncUrl(query) {
     var url = new URL(window.location.href);
@@ -317,6 +346,16 @@
     return true;
   }
 
+  function selectedResult() {
+    return resultsEl.querySelector('.doc-search-result[aria-selected="true"]') || searchResults()[0] || null;
+  }
+
+  function activateResult(result) {
+    if (!result) return false;
+    result.click();
+    return true;
+  }
+
   function renderResults(results) {
     var terms = searchableTerms(input.value);
     resultsEl.innerHTML = '';
@@ -445,12 +484,36 @@
   }
 
   helpToggle.addEventListener('click', function () {
+    if (overlay.hidden) openSearchOverlay();
     setHelpVisible(helpEl.hidden);
   });
 
+  openButton.addEventListener('click', function () {
+    openSearchOverlay();
+  });
+
+  backdrop.addEventListener('click', function () {
+    closeSearchOverlay();
+  });
+
   document.addEventListener('keydown', function (event) {
+    if (event.key === '/' && !event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      var target = event.target;
+      var tag = target && target.tagName;
+      var isEditable = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable;
+      if (!isEditable) {
+        event.preventDefault();
+        window.docPiOpenSearch();
+        return;
+      }
+    }
     if (event.key === 'Escape' && !helpEl.hidden) {
       setHelpVisible(false);
+      return;
+    }
+    if (event.key === 'Escape' && !overlay.hidden && document.activeElement !== input) {
+      event.preventDefault();
+      closeSearchOverlay();
     }
   });
 
@@ -459,11 +522,14 @@
       if (focusResult(0) || focusRecent(0)) event.preventDefault();
       return;
     }
+    if (event.key === 'Enter') {
+      if (activateResult(selectedResult())) event.preventDefault();
+      return;
+    }
     if (event.key === 'Escape') {
-      if (input.value || resultsEl.children.length) {
-        event.preventDefault();
-        clearSearch();
-      }
+      event.preventDefault();
+      if (input.value || resultsEl.children.length) clearSearch();
+      else closeSearchOverlay();
     }
   });
 
@@ -486,8 +552,10 @@
       }
       if (event.key === 'Escape') {
         event.preventDefault();
-        clearSearch();
-        input.focus();
+        if (input.value || resultsEl.children.length) {
+          clearSearch();
+          input.focus();
+        } else closeSearchOverlay();
       }
       return;
     }
@@ -508,10 +576,17 @@
       } else focusResult(index - 1);
       return;
     }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      activateResult(document.activeElement);
+      return;
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
-      clearSearch();
-      input.focus();
+      if (input.value || resultsEl.children.length) {
+        clearSearch();
+        input.focus();
+      } else closeSearchOverlay();
     }
   });
 
@@ -561,7 +636,19 @@
   });
 
   input.addEventListener('focus', function () {
-    renderRecentSearches();
+    if (overlay.hidden) openSearchOverlay();
+    else renderRecentSearches();
+  });
+
+  input.addEventListener('compositionstart', function () {
+    composingSearch = true;
+    clearTimeout(timer);
+  });
+
+  input.addEventListener('compositionend', function () {
+    composingSearch = false;
+    clearTimeout(timer);
+    runSearch(input.value);
   });
 
   input.addEventListener('input', function () {
@@ -570,6 +657,7 @@
     setClearVisible(query);
     syncUrl(query);
     clearTimeout(timer);
+    if (composingSearch) return;
     timer = setTimeout(function () {
       runSearch(query);
     }, 120);
@@ -579,14 +667,18 @@
     var query = new URL(window.location.href).searchParams.get('q') || '';
     input.value = query;
     setClearVisible(query);
-    if (query) runSearch(query);
-    else clearSearch();
+    if (query) {
+      openSearchOverlay();
+      runSearch(query);
+    } else clearSearch();
   });
 
   var initialQuery = new URL(window.location.href).searchParams.get('q') || '';
   if (initialQuery) {
     input.value = initialQuery;
     setClearVisible(initialQuery);
+    openSearchOverlay();
     runSearch(initialQuery);
   }
+
 })();

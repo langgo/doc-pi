@@ -15,13 +15,6 @@
     var searchInput = document.querySelector('.doc-search-input');
     var target = event.target;
 
-    if (event.key === '/' && !isEditableTarget(target) && searchInput) {
-      event.preventDefault();
-      searchInput.focus();
-      searchInput.select();
-      return;
-    }
-
     if (event.key === 'Escape' && searchInput && document.activeElement === searchInput && searchInput.value) {
       event.preventDefault();
       clearSearch(searchInput);
