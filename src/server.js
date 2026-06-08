@@ -7,9 +7,10 @@ import gradient from 'gradient-string';
 import { fileURLToPath } from 'url';
 import { loadRuntimeConfig } from './runtime/config.js';
 import { printRuntimeDiagnostics, validateRuntimeConfig } from './runtime/diagnostics.js';
+import { createStartupProfiler } from './runtime/startup-profile.js';
 import { renderHtml } from './core/server/render.js';
 import { stripBOM, extractToc, buildTocHtml, processMarkdown, extractFrontmatter } from './core/server/markdown.js';
-import { getChapterFiles, getChapterNav, buildFileListToc } from './core/server/navigation.js';
+import { getChapterFiles, getChapterNav, getChapterPosition, buildFileListToc } from './core/server/navigation.js';
 import { registerPlugin, resetPlugins, tryPluginApiRoutes, collectPluginInjections } from './core/server/plugins.js';
 import { searchMarkdownFiles } from './core/server/search.js';
 import { json, resolveSafePath, serveStatic } from './core/server/server.js';
@@ -34,12 +35,11 @@ async function handleMarkdown(filePath, chapterFiles, pluginInjections) {
   const frontmatterResult = extractFrontmatter(mdContent);
   mdContent = frontmatterResult.mdContent;
   const headings = extractToc(mdContent);
-  const tocHtml = await buildFileListToc(path.dirname(filePath), currentFile) + buildTocHtml(headings, currentFile);
+  const tocHtml = buildTocHtml(headings, currentFile) + await buildFileListToc(path.dirname(filePath), currentFile);
 
   const title = frontmatterResult.metadata?.title || currentFile;
   const chapterNav = getChapterNav(currentFile, chapterFiles);
-  const chapterIndex = chapterFiles.indexOf(currentFile);
-  const chapterPosition = chapterIndex === -1 ? '' : '<div class="chapter-position" aria-label="当前第 ' + (chapterIndex + 1) + ' 章，共 ' + chapterFiles.length + ' 章">第 ' + (chapterIndex + 1) + ' / ' + chapterFiles.length + ' 章</div>';
+  const chapterPosition = getChapterPosition(currentFile, chapterFiles);
   const bottomChapterNav = getChapterNav(currentFile, chapterFiles, { position: 'bottom', withLabels: true });
   const contentWithNav = chapterNav + chapterPosition + html + bottomChapterNav;
 
@@ -169,35 +169,42 @@ function tryListen(server, port) {
 }
 
 export async function startServer(runtimeConfig) {
-  const config = setRuntimeConfig(runtimeConfig);
-  printRuntimeDiagnostics(await validateRuntimeConfig(config));
+  const profiler = createStartupProfiler();
+  const config = await profiler.step('runtime config', async () => setRuntimeConfig(runtimeConfig));
+  const diagnostics = await profiler.step('diagnostics', async () => validateRuntimeConfig(config));
+  printRuntimeDiagnostics(diagnostics);
 
-  resetPlugins();
-  if (config.comments.enabled !== false) {
-    registerPlugin(commentsPlugin);
-  }
-  if (config.aiQa.enabled !== false) {
-    await mkdir(config.aiQa.agentDir, { recursive: true });
-    registerPlugin(createAiQaPlugin({
-      agentDir: config.aiQa.agentDir,
-      historyDir: config.aiQa.historyDir,
-      persistThinking: config.aiQa.persistThinking,
-    }));
-  }
+  await profiler.step('plugins', async () => {
+    resetPlugins();
+    if (config.comments.enabled !== false) {
+      registerPlugin(commentsPlugin);
+    }
+    if (config.aiQa.enabled !== false) {
+      await mkdir(config.aiQa.agentDir, { recursive: true });
+      registerPlugin(createAiQaPlugin({
+        agentDir: config.aiQa.agentDir,
+        historyDir: config.aiQa.historyDir,
+        persistThinking: config.aiQa.persistThinking,
+      }));
+    }
+  });
 
-  const server = createDocPiServer(config);
+  const server = await profiler.step('create server', async () => createDocPiServer(config));
   const startPort = Number(config.port) || 3000;
   const maxPort = startPort + 99;
 
   for (let port = startPort; port <= maxPort; port += 1) {
-    const ok = await tryListen(server, port);
+    const ok = await profiler.step(`listen ${port}`, async () => tryListen(server, port));
     if (ok) {
       const addr = server.address();
       const url = `http://localhost:${addr.port}`;
-      console.log(boxen(
-        gradient.pastel.multiline(`${config.siteTitle}\n\n  ${url}`),
-        { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'cyan' }
-      ));
+      await profiler.step('banner', async () => {
+        console.log(boxen(
+          gradient.pastel.multiline(`${config.siteTitle}\n\n  ${url}`),
+          { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'cyan' }
+        ));
+      });
+      profiler.done();
       return { server, port: addr.port, url, config };
     }
   }

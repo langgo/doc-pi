@@ -14,6 +14,19 @@ export async function getChapterFiles(rootDir = getContentRoot()) {
     });
 }
 
+export function getReadableChapterFiles(chapterFiles) {
+  return chapterFiles.filter(function (file) { return file !== 'README.md'; });
+}
+
+export function getChapterPosition(currentFile, chapterFiles, className = 'chapter-position') {
+  const readableFiles = getReadableChapterFiles(chapterFiles);
+  const idx = readableFiles.indexOf(currentFile);
+  if (idx === -1) return '';
+  const currentChapter = idx + 1;
+  const totalChapters = readableFiles.length;
+  return `<div class="${className}" aria-label="当前第 ${currentChapter} 章，共 ${totalChapters} 章">第 ${currentChapter} / ${totalChapters} 章</div>`;
+}
+
 export function getChapterNav(currentFile, chapterFiles, options = {}) {
   const idx = chapterFiles.indexOf(currentFile);
   if (idx === -1) return '';
