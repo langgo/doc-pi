@@ -74,6 +74,29 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('restores the last reading position after refreshing the same chapter', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.setItem('doc-pi:reading-position:/rich-markdown.md', '260'));
+      await page.evaluate(() => {
+        window.__docPiScrollToCalls = [];
+        const originalScrollTo = window.scrollTo.bind(window);
+        window.scrollTo = function (x, y) {
+          const top = typeof x === 'object' ? x.top : y;
+          window.__docPiScrollToCalls.push(top);
+          return originalScrollTo(x, y);
+        };
+        window.dispatchEvent(new Event('doc-pi:restore-reading-position'));
+      });
+      await page.waitForFunction(() => window.__docPiScrollToCalls?.includes(260));
+      expect(await page.evaluate(() => window.__docPiScrollToCalls)).toContain(260);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('clamps stale reading positions to the current chapter height', async () => {
     const page = await browser.newPage();
     try {
@@ -172,6 +195,62 @@ describe('Core render E2E', () => {
       await page.keyboard.up('Meta');
       await page.waitForTimeout(120);
       expect(await page.$eval('.doc-search-overlay', el => el.hidden)).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows shortcut guidance from the sidebar search help button', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      const controls = await page.$eval('.doc-search-controls', el => {
+        const search = el.querySelector('.doc-search-open').getBoundingClientRect();
+        const help = el.querySelector('.doc-search-shortcuts-open').getBoundingClientRect();
+        return {
+          helpLabel: el.querySelector('.doc-search-shortcuts-open')?.getAttribute('aria-label'),
+          expanded: el.querySelector('.doc-search-shortcuts-open')?.getAttribute('aria-expanded'),
+          searchRight: Math.round(search.right),
+          helpLeft: Math.round(help.left),
+        };
+      });
+      expect(controls.helpLabel).toBe('查看快捷键说明');
+      expect(controls.expanded).toBe('false');
+      expect(controls.helpLeft).toBeGreaterThanOrEqual(controls.searchRight + 6);
+
+      await page.click('.doc-search-shortcuts-open');
+      await page.waitForSelector('.doc-shortcuts-popover:not([hidden])');
+      const help = await page.$eval('.doc-shortcuts-popover', el => {
+        const searchDialog = document.querySelector('.doc-search-dialog');
+        return {
+          role: el.getAttribute('role'),
+          label: el.getAttribute('aria-label'),
+          text: el.textContent,
+          modal: el.getAttribute('aria-modal'),
+          width: Math.round(el.getBoundingClientRect().width),
+          centerOffset: Math.round(Math.abs((el.getBoundingClientRect().left + el.getBoundingClientRect().width / 2) - window.innerWidth / 2)),
+          borderRadius: getComputedStyle(el).borderRadius,
+          searchDialogBorderRadius: getComputedStyle(searchDialog).borderRadius,
+        };
+      });
+      expect(help.role).toBe('dialog');
+      expect(help.label).toBe('快捷键说明');
+      expect(help.modal).toBe('true');
+      expect(help.width).toBeGreaterThan(360);
+      expect(help.centerOffset).toBeLessThanOrEqual(2);
+      expect(help.borderRadius).toBe(help.searchDialogBorderRadius);
+      expect(help.text).toContain('/');
+      expect(help.text).toContain('打开搜索');
+      expect(help.text).toContain('Enter');
+      expect(help.text).toContain('打开选中结果');
+      expect(help.text).toContain('[');
+      expect(help.text).toContain('上一章');
+      expect(help.text).toContain(']');
+      expect(help.text).toContain('下一章');
+      expect(help.text).toContain('Esc');
+
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-shortcuts-overlay')?.hidden === true);
     } finally {
       await page.close();
     }
@@ -1238,16 +1317,25 @@ describe('Core render E2E', () => {
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
       await page.waitForSelector('.markdown-content .chapter-nav-bottom');
-      const nav = await page.$eval('.markdown-content .chapter-nav-bottom', el => ({
-        label: el.getAttribute('aria-label'),
-        previous: el.querySelector('.nav-prev')?.getAttribute('href'),
-        previousLabel: el.querySelector('.nav-prev')?.getAttribute('aria-label'),
-        positionText: el.querySelector('.chapter-nav-position')?.textContent,
-        positionLabel: el.querySelector('.chapter-nav-position')?.getAttribute('aria-label'),
-        next: el.querySelector('.nav-next')?.getAttribute('href'),
-        nextLabel: el.querySelector('.nav-next')?.getAttribute('aria-label'),
-        text: el.textContent,
-      }));
+      const nav = await page.$eval('.markdown-content .chapter-nav-bottom', el => {
+        const topNav = document.querySelector('.markdown-content > .chapter-nav:not(.chapter-nav-bottom)');
+        return {
+          label: el.getAttribute('aria-label'),
+          previous: el.querySelector('.nav-prev')?.getAttribute('href'),
+          previousLabel: el.querySelector('.nav-prev')?.getAttribute('aria-label'),
+          positionText: el.querySelector('.chapter-nav-position')?.textContent,
+          positionLabel: el.querySelector('.chapter-nav-position')?.getAttribute('aria-label'),
+          next: el.querySelector('.nav-next')?.getAttribute('href'),
+          nextLabel: el.querySelector('.nav-next')?.getAttribute('aria-label'),
+          text: el.textContent,
+          previousHint: el.querySelector('.nav-prev em')?.textContent,
+          nextHint: el.querySelector('.nav-next em')?.textContent,
+          topBackground: getComputedStyle(topNav).backgroundColor,
+          bottomBackground: getComputedStyle(el).backgroundColor,
+          topBorderRadius: getComputedStyle(topNav).borderRadius,
+          bottomBorderRadius: getComputedStyle(el).borderRadius,
+        };
+      });
       expect(nav.label).toBe('章节导航');
       expect(nav.previous).toBe('/README.md');
       expect(nav.previousLabel).toBe('上一章 README，快捷键 [');
@@ -1257,8 +1345,10 @@ describe('Core render E2E', () => {
       expect(nav.nextLabel).toBe('下一章 sample-chapter，快捷键 ]');
       expect(nav.text).toContain('上一章');
       expect(nav.text).toContain('下一章');
-      expect(nav.text).toContain('快捷键 [');
-      expect(nav.text).toContain('快捷键 ]');
+      expect(nav.previousHint).toBe(undefined);
+      expect(nav.nextHint).toBe(undefined);
+      expect(nav.topBackground).toBe(nav.bottomBackground);
+      expect(nav.topBorderRadius).toBe(nav.bottomBorderRadius);
     } finally {
       await page.close();
     }

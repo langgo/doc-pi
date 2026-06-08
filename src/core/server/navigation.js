@@ -36,19 +36,17 @@ export function getChapterNav(currentFile, chapterFiles, options = {}) {
   const withLabels = options.withLabels === true;
   if (prev) {
     const prevName = escapeHtml(prev.replace(/\.md$/, ''));
-    const hint = withLabels ? '<em>快捷键 [</em>' : '';
     const aria = withLabels ? ` aria-label="上一章 ${prevName}，快捷键 ["` : ` aria-label="上一章 ${prevName}"`;
-    parts.push(`<a href="/${prev}" class="nav-prev"${aria}>← ${withLabels ? '<span>上一章</span><strong>' + prevName + '</strong>' + hint : prevName}</a>`);
+    parts.push(`<a href="/${prev}" class="nav-prev"${aria}>← ${withLabels ? '<span>上一章</span> ' + prevName : prevName}</a>`);
   } else if (withLabels) {
-    parts.push('<span class="nav-prev nav-disabled" aria-disabled="true"><span>上一章</span><strong>已是第一章</strong><em>快捷键 [</em></span>');
+    parts.push('<span class="nav-prev nav-disabled" aria-disabled="true"><span>上一章</span> 已是第一章</span>');
   }
   if (next) {
     const nextName = escapeHtml(next.replace(/\.md$/, ''));
-    const hint = withLabels ? '<em>快捷键 ]</em>' : '';
     const aria = withLabels ? ` aria-label="下一章 ${nextName}，快捷键 ]"` : ` aria-label="下一章 ${nextName}"`;
-    parts.push(`<a href="/${next}" class="nav-next"${aria}>${withLabels ? '<span>下一章</span><strong>' + nextName + '</strong>' + hint : nextName} →</a>`);
+    parts.push(`<a href="/${next}" class="nav-next"${aria}>${withLabels ? '<span>下一章</span> ' + nextName : nextName} →</a>`);
   } else if (withLabels) {
-    parts.push('<span class="nav-next nav-disabled" aria-disabled="true"><span>下一章</span><strong>已是最后一章</strong><em>快捷键 ]</em></span>');
+    parts.push('<span class="nav-next nav-disabled" aria-disabled="true"><span>下一章</span> 已是最后一章</span>');
   }
   if (!parts.length) return '';
   if (withLabels) {

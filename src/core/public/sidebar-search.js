@@ -1,5 +1,9 @@
 (function () {
   var openButton = document.querySelector('.doc-search-open');
+  var shortcutsButton = document.querySelector('.doc-search-shortcuts-open');
+  var shortcutsOverlay = document.querySelector('.doc-shortcuts-overlay');
+  var shortcutsBackdrop = document.querySelector('.doc-shortcuts-backdrop');
+  var shortcutsPopover = document.querySelector('.doc-shortcuts-popover');
   var overlay = document.querySelector('.doc-search-overlay');
   var backdrop = document.querySelector('.doc-search-backdrop');
   var inputWrap = document.querySelector('.doc-search-input-wrap');
@@ -11,7 +15,7 @@
   var helpEl = document.querySelector('.doc-search-help');
   var filtersEl = document.querySelector('.doc-search-filters');
   var resultsEl = document.querySelector('.doc-search-results');
-  if (!openButton || !overlay || !backdrop || !inputWrap || !input || !clearButton || !countEl || !statusEl || !helpToggle || !helpEl || !filtersEl || !resultsEl) return;
+  if (!openButton || !shortcutsButton || !shortcutsOverlay || !shortcutsBackdrop || !shortcutsPopover || !overlay || !backdrop || !inputWrap || !input || !clearButton || !countEl || !statusEl || !helpToggle || !helpEl || !filtersEl || !resultsEl) return;
 
   var activeRequest = 0;
   var activeSearchController = null;
@@ -29,6 +33,12 @@
     input.focus();
     input.select();
     renderRecentSearches();
+  }
+
+  function setShortcutsVisible(visible) {
+    shortcutsOverlay.hidden = !visible;
+    shortcutsButton.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    if (visible) shortcutsPopover.focus?.();
   }
 
   function closeSearchOverlay(restoreFocus) {
@@ -489,7 +499,17 @@
   });
 
   openButton.addEventListener('click', function () {
+    setShortcutsVisible(false);
     openSearchOverlay();
+  });
+
+  shortcutsButton.addEventListener('click', function () {
+    setShortcutsVisible(shortcutsOverlay.hidden);
+  });
+
+  shortcutsBackdrop.addEventListener('click', function () {
+    setShortcutsVisible(false);
+    shortcutsButton.focus();
   });
 
   backdrop.addEventListener('click', function () {
@@ -506,6 +526,12 @@
         window.docPiOpenSearch();
         return;
       }
+    }
+    if (event.key === 'Escape' && !shortcutsOverlay.hidden) {
+      event.preventDefault();
+      setShortcutsVisible(false);
+      shortcutsButton.focus();
+      return;
     }
     if (event.key === 'Escape' && !helpEl.hidden) {
       setHelpVisible(false);
@@ -637,7 +663,7 @@
 
   input.addEventListener('focus', function () {
     if (overlay.hidden) openSearchOverlay();
-    else renderRecentSearches();
+    if (!input.value.trim()) renderRecentSearches();
   });
 
   input.addEventListener('compositionstart', function () {
