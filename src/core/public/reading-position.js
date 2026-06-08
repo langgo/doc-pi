@@ -5,6 +5,7 @@
   var storageKey = 'doc-pi:reading-position:' + window.location.pathname;
   var ticking = false;
   var restored = false;
+  var restoreEvent = 'doc-pi:restore-reading-position';
 
   try {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
@@ -23,13 +24,14 @@
 
   function savePosition() {
     ticking = false;
+    if (!restored) return;
     try {
       window.localStorage.setItem(storageKey, String(Math.max(0, Math.round(window.scrollY || 0))));
     } catch (_) {}
   }
 
   function scheduleSave() {
-    if (ticking) return;
+    if (!restored || ticking) return;
     ticking = true;
     window.requestAnimationFrame(savePosition);
   }
@@ -47,8 +49,13 @@
     window.scrollTo(0, Math.min(position, maxScrollTop()));
   }
 
+  window.addEventListener(restoreEvent, function () {
+    restored = false;
+    restorePosition();
+  });
   window.addEventListener('scroll', scheduleSave, { passive: true });
   window.addEventListener('beforeunload', savePosition);
+  window.addEventListener('pageshow', restorePosition, { once: true });
   window.addEventListener('load', restorePosition, { once: true });
-  if (document.readyState === 'complete') restorePosition();
+  if (document.readyState === 'complete' || document.readyState === 'interactive') restorePosition();
 })();

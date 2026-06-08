@@ -24,10 +24,13 @@
         <a href="/"><%- siteTitle %></a>
         <button class="sidebar-collapse-toggle" type="button" aria-label="折叠侧边栏" aria-expanded="true">⇤</button>
       </div>
-      <button class="doc-search-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="doc-search-overlay">
-        <span class="doc-search-open-text">搜索文档</span>
-        <kbd>/</kbd>
-      </button>
+      <div class="doc-search-controls">
+        <button class="doc-search-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="doc-search-overlay">
+          <span class="doc-search-open-text">搜索文档</span>
+          <kbd>/</kbd>
+        </button>
+        <button class="doc-search-shortcuts-open" type="button" aria-label="查看快捷键说明" aria-haspopup="dialog" aria-expanded="false" aria-controls="doc-shortcuts-popover">?</button>
+      </div>
       <nav class="toc-nav">
         <%- tocHtml %>
       </nav>
@@ -58,6 +61,20 @@
     <div class="main">
       <div class="content-wrap">
         <div id="view-rendered" class="markdown-content"><%- content %></div>
+      </div>
+    </div>
+  </div>
+  <div id="doc-shortcuts-popover" class="doc-shortcuts-overlay" hidden>
+    <button class="doc-shortcuts-backdrop" type="button" aria-label="关闭快捷键说明"></button>
+    <div class="doc-shortcuts-popover" role="dialog" aria-modal="true" aria-label="快捷键说明">
+      <h2>快捷键说明</h2>
+      <div class="doc-shortcuts-list">
+        <div><kbd>/</kbd><span>打开搜索</span></div>
+        <div><kbd>Enter</kbd><span>打开选中结果</span></div>
+        <div><kbd>↑/↓</kbd><span>切换搜索结果</span></div>
+        <div><kbd>Esc</kbd><span>清空或关闭</span></div>
+        <div><kbd>[</kbd><span>上一章</span></div>
+        <div><kbd>]</kbd><span>下一章</span></div>
       </div>
     </div>
   </div>
