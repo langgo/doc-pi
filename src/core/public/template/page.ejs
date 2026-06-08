@@ -16,10 +16,20 @@
   <% } %>
 </head>
 <body>
+  <div class="reading-progress" role="progressbar" aria-label="阅读进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+  <button class="back-to-top" type="button" aria-label="返回顶部" hidden>↑</button>
   <div class="app">
     <aside class="sidebar">
       <div class="sidebar-header">
         <a href="/"><%- siteTitle %></a>
+        <button class="sidebar-collapse-toggle" type="button" aria-label="折叠侧边栏" aria-expanded="true">⇤</button>
+      </div>
+      <div class="doc-search-controls">
+        <button class="doc-search-open" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="doc-search-overlay">
+          <span class="doc-search-open-text">搜索文档</span>
+          <kbd>/</kbd>
+        </button>
+        <button class="doc-search-shortcuts-open" type="button" aria-label="查看快捷键说明" aria-haspopup="dialog" aria-expanded="false" aria-controls="doc-shortcuts-popover">?</button>
       </div>
       <nav class="toc-nav">
         <%- tocHtml %>
@@ -54,27 +64,60 @@
       </div>
     </div>
   </div>
+  <div id="doc-shortcuts-popover" class="doc-shortcuts-overlay" hidden>
+    <button class="doc-shortcuts-backdrop" type="button" aria-label="关闭快捷键说明"></button>
+    <div class="doc-shortcuts-popover" role="dialog" aria-modal="true" aria-label="快捷键说明">
+      <h2>快捷键说明</h2>
+      <div class="doc-shortcuts-list">
+        <div><kbd>/</kbd><span>打开搜索</span></div>
+        <div><kbd>Enter</kbd><span>打开选中结果</span></div>
+        <div><kbd>↑/↓</kbd><span>切换搜索结果</span></div>
+        <div><kbd>Esc</kbd><span>清空或关闭</span></div>
+        <div><kbd>[</kbd><span>上一章</span></div>
+        <div><kbd>]</kbd><span>下一章</span></div>
+      </div>
+    </div>
+  </div>
+  <div id="doc-search-overlay" class="doc-search-overlay" role="dialog" aria-modal="true" aria-label="搜索文档" hidden>
+    <button class="doc-search-backdrop" type="button" aria-label="关闭搜索"></button>
+    <div class="doc-search-dialog">
+      <div class="doc-search" role="search">
+        <div class="doc-search-input-wrap">
+          <input class="doc-search-input" type="text" placeholder="搜索文档" aria-label="搜索文档" autocomplete="off" inputmode="search" enterkeyhint="search">
+          <button class="doc-search-clear" type="button" aria-label="清空搜索" hidden>×</button>
+          <span class="doc-search-count" aria-label="0 个搜索结果" hidden>0</span>
+        </div>
+        <div class="doc-search-status" aria-live="polite"></div>
+        <button class="doc-search-help-toggle" type="button" aria-expanded="false" aria-controls="doc-search-help">?</button>
+        <div id="doc-search-help" class="doc-search-help" role="dialog" aria-label="搜索帮助" hidden>
+          <div>输入关键词搜索文档内容。</div>
+          <div>使用 <code>tag:&lt;name&gt;</code> 按标签过滤。</div>
+          <div>按 <kbd>/</kbd> 打开搜索，按 <kbd>↑/↓</kbd> 导航结果或最近搜索。</div>
+          <div>按 <kbd>Esc</kbd> 清空搜索或关闭搜索。</div>
+        </div>
+        <div class="doc-search-filters" aria-label="搜索过滤条件"></div>
+        <div class="doc-search-results"></div>
+      </div>
+    </div>
+  </div>
   <div class="lightbox" id="lightbox">
     <span class="lightbox-close" id="lightbox-close">&times;</span>
     <div class="lightbox-content" id="lightbox-content"></div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-  <script>
-    mermaid.initialize({ startOnLoad: false });
-
-    function renderMermaid() {
-      mermaid.run({ querySelector: '.mermaid' });
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', renderMermaid);
-    } else {
-      renderMermaid();
-    }
-  </script>
+  <script src="/core/public/mermaid-renderer.js"></script>
   <script src="/core/public/core-state.js"></script>
   <script src="/core/public/dom-utils.js"></script>
+  <script src="/core/public/sidebar-collapse.js"></script>
+  <script src="/core/public/reading-progress.js"></script>
+  <script src="/core/public/reading-position.js"></script>
+  <script src="/core/public/back-to-top.js"></script>
+  <script src="/core/public/sidebar-search.js"></script>
+  <script src="/core/public/search-highlight.js"></script>
+  <script src="/core/public/heading-anchors.js"></script>
+  <script src="/core/public/code-copy.js"></script>
+  <script src="/core/public/keyboard-shortcuts.js"></script>
   <script src="/core/public/sidebar-toc.js"></script>
   <script src="/core/public/mermaid-lightbox.js"></script>
   <script src="/core/public/settings-menu.js"></script>

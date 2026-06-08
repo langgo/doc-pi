@@ -100,6 +100,79 @@ describe('markdown', () => {
       expect(html).toContain('<h');
     });
 
+    it('should render frontmatter metadata and remove it from body', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-frontmatter.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, '---\ntitle: Custom Title\ndescription: Short summary\ntags: docs, guide\n---\n# Body Title\n\nBody text.\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('<section class="frontmatter-metadata"');
+        expect(html).toContain('Custom Title');
+        expect(html).toContain('Short summary');
+        expect(html).toContain('<span class="frontmatter-tag">docs</span>');
+        expect(html).toContain('<span class="frontmatter-tag">guide</span>');
+        expect(html).not.toContain('title: Custom Title');
+        expect(html).not.toContain('description: Short summary');
+        expect(html).toContain('<h1 id="body-title">');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
+    it('should render markdown footnotes with backlinks', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-footnotes.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, 'Text with note.[^1]\n\n[^1]: Footnote content.\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('class="footnote-ref"');
+        expect(html).toContain('id="fnref-1"');
+        expect(html).toContain('href="#fn-1"');
+        expect(html).toContain('<section class="footnotes">');
+        expect(html).toContain('id="fn-1"');
+        expect(html).toContain('Footnote content.');
+        expect(html).toContain('class="footnote-backref"');
+        expect(html).toContain('href="#fnref-1"');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
+    it('should secure external links without changing local or hash links', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-link-safety.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, '[External](https://example.com)\n[Local](/sample-chapter.md)\n[Hash](#section)\n[Mail](mailto:test@example.com)\n[Bad](javascript:alert(1))\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('<a href="https://example.com" target="_blank" rel="noopener noreferrer">External</a>');
+        expect(html).toContain('<a href="/sample-chapter.md">Local</a>');
+        expect(html).toContain('<a href="#section">Hash</a>');
+        expect(html).toContain('<a href="mailto:test@example.com">Mail</a>');
+        expect(html).not.toContain('javascript:alert');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
+    it('should render heading self-links for copyable anchors', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-heading-anchor.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, '# Copy Link\n\n## Deep Section\n');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('<h1 id="copy-link">');
+        expect(html).toContain('class="heading-anchor"');
+        expect(html).toContain('href="#copy-link"');
+        expect(html).toContain('aria-label="Copy link to Copy Link"');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
     it('should handle mermaid blocks', async () => {
       // Create a temp markdown file with mermaid
       const fs = await import('fs/promises');

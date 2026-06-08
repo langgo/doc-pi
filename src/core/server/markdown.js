@@ -58,10 +58,115 @@ export function buildTocHtml(headings, currentFile) {
   return html;
 }
 
+export function extractFrontmatter(mdContent) {
+  if (!mdContent.startsWith('---\n')) return { mdContent, metadata: null };
+  const end = mdContent.indexOf('\n---', 4);
+  if (end === -1) return { mdContent, metadata: null };
+  const raw = mdContent.slice(4, end).trim();
+  const metadata = {};
+  for (const line of raw.split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (key) metadata[key] = value;
+  }
+  return { mdContent: mdContent.slice(end + 4).replace(/^\n+/, ''), metadata };
+}
+
+export function analyzeReadingStats(mdContent) {
+  const text = mdContent
+    .replace(/^\[\^([^\]]+)\]:\s+(.+)$/gm, ' ')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[#>*_`\[\]()|:-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return { minutes: 1, count: 0 };
+  const cjkCount = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  const wordCount = (text.replace(/[\u4e00-\u9fff]/g, ' ').match(/[A-Za-z0-9]+/g) || []).length;
+  const count = cjkCount + wordCount;
+  return { minutes: Math.max(1, Math.ceil(count / 220)), count };
+}
+
+function renderReadingTime(stats) {
+  return '<div class="reading-time" aria-label="预计阅读时间 ' + stats.minutes + ' 分钟，约 ' + stats.count + ' 字">约 ' + stats.minutes + ' 分钟阅读 · ' + stats.count + ' 字</div>';
+}
+
+function renderFrontmatterMetadata(metadata) {
+  if (!metadata || (!metadata.title && !metadata.description && !metadata.tags)) return '';
+  let html = '<section class="frontmatter-metadata" aria-label="文档元数据">';
+  if (metadata.title) html += '<div class="frontmatter-title">' + escapeHtml(metadata.title) + '</div>';
+  if (metadata.description) html += '<div class="frontmatter-description">' + escapeHtml(metadata.description) + '</div>';
+  if (metadata.tags) {
+    html += '<div class="frontmatter-tags">';
+    for (const tag of metadata.tags.split(',')) {
+      const trimmed = tag.trim();
+      if (trimmed) html += '<span class="frontmatter-tag">' + escapeHtml(trimmed) + '</span>';
+    }
+    html += '</div>';
+  }
+  html += '</section>';
+  return html;
+}
+
+function extractFootnotes(mdContent) {
+  const footnotes = [];
+  const withoutDefinitions = mdContent.replace(/^\[\^([^\]]+)\]:\s+(.+)$/gm, (_, id, content) => {
+    footnotes.push({ id: id.trim(), content: content.trim() });
+    return '';
+  });
+  return { mdContent: withoutDefinitions, footnotes };
+}
+
+function renderFootnoteRefs(html, footnotes) {
+  if (!footnotes.length) return html;
+  const known = new Set(footnotes.map(footnote => footnote.id));
+  return html.replace(/\[\^([^\]]+)\]/g, (match, id) => {
+    const safeId = slugify(id);
+    if (!known.has(id)) return match;
+    return '<sup><a class="footnote-ref" id="fnref-' + safeId + '" href="#fn-' + safeId + '">' + escapeHtml(id) + '</a></sup>';
+  });
+}
+
+function appendFootnotes(html, footnotes) {
+  if (!footnotes.length) return html;
+  let list = '<section class="footnotes"><hr><ol>';
+  for (const footnote of footnotes) {
+    const safeId = slugify(footnote.id);
+    const content = secureExternalLinks(marked(footnote.content).trim());
+    list += '<li id="fn-' + safeId + '">' + content + ' <a class="footnote-backref" href="#fnref-' + safeId + '" aria-label="返回脚注引用">↩</a></li>';
+  }
+  list += '</ol></section>';
+  return html + list;
+}
+
+function secureExternalLinks(html) {
+  return html.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
+    const hrefMatch = attrs.match(/\s+href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    if (!hrefMatch) return match;
+    const href = hrefMatch[2] || hrefMatch[3] || hrefMatch[4] || '';
+    if (!/^https?:\/\//i.test(href)) return match;
+    let nextAttrs = attrs
+      .replace(/\s+target\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '')
+      .replace(/\s+rel\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i, '');
+    return '<a' + nextAttrs + ' target="_blank" rel="noopener noreferrer">';
+  });
+}
+
 // Process markdown content: protect mermaid/math blocks, render with marked, restore
 export async function processMarkdown(filePath) {
   let mdContent = await readFile(filePath, 'utf-8');
   mdContent = stripBOM(mdContent);
+
+  const frontmatterResult = extractFrontmatter(mdContent);
+  mdContent = frontmatterResult.mdContent;
+  const metadata = frontmatterResult.metadata;
+
+  const footnoteResult = extractFootnotes(mdContent);
+  mdContent = footnoteResult.mdContent;
+  const footnotes = footnoteResult.footnotes;
+  const readingStats = analyzeReadingStats(mdContent);
 
   // Replace mermaid blocks with placeholders before marked processing
   const mermaidBlocks = [];
@@ -136,17 +241,44 @@ export async function processMarkdown(filePath) {
       return '<' + tag + safeAttrs + '>';
     });
 
-  // Add id attributes to headings for TOC anchor navigation
+  html = renderReadingTime(readingStats) + renderFrontmatterMetadata(metadata) + html;
+  html = secureExternalLinks(html);
+
+  // Add id attributes and self-links to headings for TOC anchor navigation.
   html = html.replace(/<(h[1-4])>(.*?)<\/\1>/g, (match, tag, text) => {
     const id = slugify(text);
-    return '<' + tag + ' id="' + id + '">' + text + '</' + tag + '>';
+    const plainText = text.replace(/<[^>]*>/g, '').trim();
+    const anchor = '<a class="heading-anchor" href="#' + id + '" aria-label="Copy link to ' + escapeHtml(plainText) + '">#</a>';
+    return '<' + tag + ' id="' + id + '">' + text + anchor + '</' + tag + '>';
   });
+
+  html = html
+    .replace(/<li>(\s*<input[^>]*type="checkbox"[^>]*>)/g, '<li class="task-list-item">$1')
+    .replace(/<ul>\s*(<li class="task-list-item">)/g, '<ul class="task-list">$1');
+
+  let sourceLine = 0;
+  let inSourceFence = false;
+  for (const line of mdContent.split(/\r?\n/)) {
+    sourceLine += 1;
+    const rawText = line.trim();
+    if (/^```/.test(rawText)) {
+      inSourceFence = !inSourceFence;
+      continue;
+    }
+    if (inSourceFence || !rawText || /^#{1,6}\s+/.test(rawText) || /^[-*+]\s+/.test(rawText)) continue;
+    const text = rawText.replace(/^>\s+/, '');
+    const renderedText = escapeHtml(text).replace(/\*\*/g, '').replace(/`/g, '');
+    html = html.replace(renderedText, '<span id="L' + sourceLine + '" class="doc-search-line-target" aria-label="搜索结果第 ' + sourceLine + ' 行" tabindex="-1"></span>' + renderedText);
+  }
 
   // Restore mermaid blocks as plain divs for mermaid.js
   html = html.replace(/<!--MERMAID_(\d+)-->/g, (_, idx) => {
     const code = mermaidBlocks[parseInt(idx)];
     return `<div class="mermaid-container"><div class="mermaid">${code}</div></div>`;
   });
+
+  html = renderFootnoteRefs(html, footnotes);
+  html = appendFootnotes(html, footnotes);
 
   // Render display math blocks server-side with KaTeX
   html = html.replace(/<!--MATH_(\d+)-->/g, (_, idx) => {

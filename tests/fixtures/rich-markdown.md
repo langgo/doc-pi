@@ -1,12 +1,25 @@
+---
+title: Rich Metadata Title
+description: Metadata summary for rendering.
+tags: docs, guide
+---
+
 # Rich Markdown Fixture
 
-This fixture covers rich markdown rendering.
+This fixture covers rich markdown rendering with a footnote.[^1]
+
+[^1]: Footnote content for rendering.
 
 ## Code
 
 ```js
 const answer = 42;
 ```
+
+## Task List
+
+- [x] Finished item
+- [ ] Pending item
 
 ## Table
 
@@ -19,12 +32,24 @@ const answer = 42;
 > Quoted text for rendering.
 
 [Example](https://example.com)
+[Local chapter](/sample-chapter.md)
+[Hash link](#table)
+
+## Image
+
+![Tiny inline SVG](data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2212%22%20height%3D%2212%22%3E%3Crect%20width%3D%2212%22%20height%3D%2212%22%20fill%3D%22red%22/%3E%3C/svg%3E)
 
 ## Mermaid
 
 ```mermaid
 graph TD
   A[Start] --> B[Done]
+```
+
+## Invalid Mermaid
+
+```mermaid
+this is not valid mermaid
 ```
 
 ## Raw HTML

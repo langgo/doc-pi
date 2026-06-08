@@ -21,12 +21,94 @@ describe('Markdown and Mermaid E2E', () => {
     const page = await browser.newPage();
     try {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
-      expect(await page.$eval('.markdown-content h1', el => el.textContent.trim())).toBe('Rich Markdown Fixture');
+      expect(await page.title()).toBe('Rich Metadata Title - Fixtures');
+      expect(await page.$eval('.markdown-content h1', el => el.childNodes[0].textContent.trim())).toBe('Rich Markdown Fixture');
+      const metadata = await page.$eval('.frontmatter-metadata', el => ({
+        text: el.textContent,
+        tags: Array.from(el.querySelectorAll('.frontmatter-tag')).map(tag => tag.textContent),
+      }));
+      expect(metadata.text).toContain('Rich Metadata Title');
+      expect(metadata.text).toContain('Metadata summary for rendering.');
+      expect(metadata.tags).toEqual(['docs', 'guide']);
+      expect(await page.$eval('.markdown-content', el => el.textContent)).not.toContain('title: Rich Metadata Title');
       expect(await page.$eval('.markdown-content pre code', el => el.textContent.trim())).toContain('const answer = 42;');
       expect(await page.$eval('.markdown-content table tbody tr td:first-child', el => el.textContent.trim())).toBe('alpha');
       expect(await page.$eval('.markdown-content blockquote', el => el.textContent.trim())).toBe('Quoted text for rendering.');
-      const link = await page.$eval('.markdown-content a[href="https://example.com"]', el => ({ text: el.textContent.trim(), target: el.getAttribute('target') }));
+      const link = await page.$eval('.markdown-content a[href="https://example.com"]', el => ({
+        text: el.textContent.trim(),
+        target: el.getAttribute('target'),
+        rel: el.getAttribute('rel'),
+      }));
+      const localTarget = await page.$eval('.markdown-content a[href="/sample-chapter.md"]', el => el.getAttribute('target'));
+      const hashTarget = await page.$eval('.markdown-content a[href="#table"]', el => el.getAttribute('target'));
       expect(link.text).toBe('Example');
+      expect(link.target).toBe('_blank');
+      expect(link.rel).toBe('noopener noreferrer');
+      expect(localTarget).toBeNull();
+      expect(hashTarget).toBeNull();
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('renders footnote references and backlinks', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.footnote-ref');
+      const state = await page.evaluate(() => ({
+        refHref: document.querySelector('.footnote-ref')?.getAttribute('href'),
+        refId: document.querySelector('.footnote-ref')?.getAttribute('id'),
+        footnotesText: document.querySelector('.footnotes')?.textContent,
+        backlinkHref: document.querySelector('.footnote-backref')?.getAttribute('href'),
+      }));
+      expect(state.refHref).toBe('#fn-1');
+      expect(state.refId).toBe('fnref-1');
+      expect(state.footnotesText).toContain('Footnote content for rendering.');
+      expect(state.backlinkHref).toBe('#fnref-1');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('renders task lists as read-only aligned checkboxes', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content li.task-list-item');
+      const state = await page.evaluate(() => {
+        const items = Array.from(document.querySelectorAll('.markdown-content li.task-list-item'));
+        const inputs = Array.from(document.querySelectorAll('.markdown-content li.task-list-item input[type="checkbox"]'));
+        return {
+          itemCount: items.length,
+          checked: inputs.map(input => input.checked),
+          disabled: inputs.map(input => input.disabled),
+          firstListStyle: getComputedStyle(items[0]).listStyleType,
+          firstDisplay: getComputedStyle(items[0]).display,
+        };
+      });
+      expect(state.itemCount).toBe(2);
+      expect(state.checked).toEqual([true, false]);
+      expect(state.disabled).toEqual([true, true]);
+      expect(state.firstListStyle).toBe('none');
+      expect(state.firstDisplay).toBe('flex');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('opens markdown images in the lightbox', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content img[alt="Tiny inline SVG"]');
+      await page.click('.markdown-content img[alt="Tiny inline SVG"]');
+      await page.waitForSelector('.lightbox.active', { timeout: 5000 });
+      const image = await page.$eval('#lightbox-content img', el => ({ alt: el.getAttribute('alt'), src: el.getAttribute('src') }));
+      expect(image.alt).toBe('Tiny inline SVG');
+      expect(image.src).toContain('data:image/svg+xml');
+      await page.click('#lightbox-close');
+      await page.waitForFunction(() => !document.querySelector('.lightbox')?.classList.contains('active'));
     } finally {
       await page.close();
     }
@@ -43,6 +125,20 @@ describe('Markdown and Mermaid E2E', () => {
       expect(await page.$('#lightbox-content svg')).not.toBeNull();
       await page.click('#lightbox-close');
       await page.waitForFunction(() => !document.querySelector('.lightbox')?.classList.contains('active'));
+    } finally {
+      await page.close();
+    }
+  }, 15000);
+
+  it('shows a readable fallback when Mermaid rendering fails', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.mermaid-error', { timeout: 10000 });
+      const errorText = await page.$eval('.mermaid-error', el => el.textContent);
+      expect(errorText).toContain('Mermaid diagram failed to render');
+      expect(errorText).toContain('this is not valid mermaid');
+      expect(await page.$('.mermaid-container svg')).not.toBeNull();
     } finally {
       await page.close();
     }

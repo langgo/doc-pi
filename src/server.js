@@ -6,11 +6,14 @@ import boxen from 'boxen';
 import gradient from 'gradient-string';
 import { fileURLToPath } from 'url';
 import { loadRuntimeConfig } from './runtime/config.js';
+import { printRuntimeDiagnostics, validateRuntimeConfig } from './runtime/diagnostics.js';
+import { createStartupProfiler } from './runtime/startup-profile.js';
 import { renderHtml } from './core/server/render.js';
-import { stripBOM, extractToc, buildTocHtml, processMarkdown } from './core/server/markdown.js';
-import { getChapterFiles, getChapterNav, buildFileListToc } from './core/server/navigation.js';
+import { stripBOM, extractToc, buildTocHtml, processMarkdown, extractFrontmatter } from './core/server/markdown.js';
+import { getChapterFiles, getChapterNav, getChapterPosition, buildFileListToc } from './core/server/navigation.js';
 import { registerPlugin, resetPlugins, tryPluginApiRoutes, collectPluginInjections } from './core/server/plugins.js';
-import { resolveSafePath, serveStatic } from './core/server/server.js';
+import { searchMarkdownFiles } from './core/server/search.js';
+import { json, resolveSafePath, serveStatic } from './core/server/server.js';
 import { setRuntimeConfig, getPackageSrcDir } from './core/server/runtime-state.js';
 import commentsPlugin from './plugins/comments/index.js';
 import createAiQaPlugin from './plugins/ai-qa/index.js';
@@ -18,7 +21,7 @@ import createAiQaPlugin from './plugins/ai-qa/index.js';
 async function handleDirectory(rootDir) {
   const readmePath = path.join(rootDir, 'README.md');
   const html = await processMarkdown(readmePath);
-  const tocHtml = await buildFileListToc(rootDir);
+  const tocHtml = await buildFileListToc(rootDir, 'README.md');
   const pluginInjections = await collectPluginInjections('README.md');
   return renderHtml({ title: 'README.md', content: html, tocHtml, currentFile: 'README.md', pluginInjections });
 }
@@ -29,12 +32,16 @@ async function handleMarkdown(filePath, chapterFiles, pluginInjections) {
 
   let mdContent = await readFile(filePath, 'utf-8');
   mdContent = stripBOM(mdContent);
+  const frontmatterResult = extractFrontmatter(mdContent);
+  mdContent = frontmatterResult.mdContent;
   const headings = extractToc(mdContent);
-  const tocHtml = buildTocHtml(headings, currentFile);
+  const tocHtml = buildTocHtml(headings, currentFile) + await buildFileListToc(path.dirname(filePath), currentFile);
 
-  const title = currentFile;
+  const title = frontmatterResult.metadata?.title || currentFile;
   const chapterNav = getChapterNav(currentFile, chapterFiles);
-  const contentWithNav = chapterNav + html + chapterNav;
+  const chapterPosition = getChapterPosition(currentFile, chapterFiles);
+  const bottomChapterNav = getChapterNav(currentFile, chapterFiles, { position: 'bottom', withLabels: true });
+  const contentWithNav = chapterNav + chapterPosition + html + bottomChapterNav;
 
   return renderHtml({ title, content: contentWithNav, tocHtml, currentFile, pluginInjections });
 }
@@ -48,6 +55,21 @@ export function createDocPiServer(runtimeConfig) {
 
     // Plugin API routes
     if (await tryPluginApiRoutes(req, res)) return;
+
+    if (url.startsWith('/api/search')) {
+      const searchUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
+      const query = searchUrl.searchParams.get('q') || '';
+      if (!query.trim()) {
+        json(res, 400, { error: 'q is required' });
+        return;
+      }
+      try {
+        json(res, 200, await searchMarkdownFiles(rootDir, query, { limit: 20 }));
+      } catch (err) {
+        json(res, 500, { error: err.message });
+      }
+      return;
+    }
 
     // Static files owned by the package, not by the configured content root.
     if (url.startsWith('/core/public/') || url.startsWith('/plugins/')) {
@@ -147,34 +169,42 @@ function tryListen(server, port) {
 }
 
 export async function startServer(runtimeConfig) {
-  const config = setRuntimeConfig(runtimeConfig);
+  const profiler = createStartupProfiler();
+  const config = await profiler.step('runtime config', async () => setRuntimeConfig(runtimeConfig));
+  const diagnostics = await profiler.step('diagnostics', async () => validateRuntimeConfig(config));
+  printRuntimeDiagnostics(diagnostics);
 
-  resetPlugins();
-  if (config.comments.enabled !== false) {
-    registerPlugin(commentsPlugin);
-  }
-  if (config.aiQa.enabled !== false) {
-    await mkdir(config.aiQa.agentDir, { recursive: true });
-    registerPlugin(createAiQaPlugin({
-      agentDir: config.aiQa.agentDir,
-      historyDir: config.aiQa.historyDir,
-      persistThinking: config.aiQa.persistThinking,
-    }));
-  }
+  await profiler.step('plugins', async () => {
+    resetPlugins();
+    if (config.comments.enabled !== false) {
+      registerPlugin(commentsPlugin);
+    }
+    if (config.aiQa.enabled !== false) {
+      await mkdir(config.aiQa.agentDir, { recursive: true });
+      registerPlugin(createAiQaPlugin({
+        agentDir: config.aiQa.agentDir,
+        historyDir: config.aiQa.historyDir,
+        persistThinking: config.aiQa.persistThinking,
+      }));
+    }
+  });
 
-  const server = createDocPiServer(config);
+  const server = await profiler.step('create server', async () => createDocPiServer(config));
   const startPort = Number(config.port) || 3000;
   const maxPort = startPort + 99;
 
   for (let port = startPort; port <= maxPort; port += 1) {
-    const ok = await tryListen(server, port);
+    const ok = await profiler.step(`listen ${port}`, async () => tryListen(server, port));
     if (ok) {
       const addr = server.address();
       const url = `http://localhost:${addr.port}`;
-      console.log(boxen(
-        gradient.pastel.multiline(`${config.siteTitle}\n\n  ${url}`),
-        { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'cyan' }
-      ));
+      await profiler.step('banner', async () => {
+        console.log(boxen(
+          gradient.pastel.multiline(`${config.siteTitle}\n\n  ${url}`),
+          { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'cyan' }
+        ));
+      });
+      profiler.done();
       return { server, port: addr.port, url, config };
     }
   }

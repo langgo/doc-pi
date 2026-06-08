@@ -33,6 +33,8 @@ describe('package verification scripts', () => {
       'bin/',
       'src/server.js',
       'src/runtime/config.js',
+      'src/runtime/init.js',
+      'src/runtime/diagnostics.js',
       'src/core/server/*.js',
       'src/core/public/*.js',
       'src/core/public/*.css',

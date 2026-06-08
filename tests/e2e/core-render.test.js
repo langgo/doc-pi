@@ -17,6 +17,31 @@ describe('Core render E2E', () => {
     if (server) await server.stop();
   });
 
+  it('shows reading metadata for chapter pages', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.reading-time');
+      await page.waitForSelector('.chapter-position');
+      expect(await page.$eval('.reading-time', el => el.textContent.trim())).toBe('约 1 分钟阅读 · 98 字');
+      expect(await page.$eval('.reading-time', el => el.getAttribute('aria-label'))).toBe('预计阅读时间 1 分钟，约 98 字');
+      const metadataLayout = await page.evaluate(() => {
+        const reading = document.querySelector('.reading-time').getBoundingClientRect();
+        const position = document.querySelector('.chapter-position').getBoundingClientRect();
+        return {
+          horizontalGap: Math.round(Math.max(reading.left, position.left) - Math.min(reading.right, position.right)),
+          verticalOffset: Math.round(Math.abs(reading.top - position.top)),
+        };
+      });
+      expect(metadataLayout.horizontalGap).toBeGreaterThanOrEqual(8);
+      expect(metadataLayout.verticalOffset).toBeLessThanOrEqual(2);
+      expect(await page.$eval('.chapter-position', el => el.textContent.trim())).toBe('第 1 / 2 章');
+      expect(await page.$eval('.chapter-position', el => el.getAttribute('aria-label'))).toBe('当前第 1 章，共 2 章');
+    } finally {
+      await page.close();
+    }
+  });
+
   it('loads homepage with fixture title', async () => {
     const page = await browser.newPage();
     try {
@@ -28,14 +53,1316 @@ describe('Core render E2E', () => {
     }
   });
 
+  it('restores the last reading position for each chapter', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => {
+        history.scrollRestoration = 'manual';
+        window.scrollTo(0, 520);
+      });
+      await page.waitForFunction(() => window.scrollY >= 500);
+      await page.waitForFunction(() => localStorage.getItem('doc-pi:reading-position:/rich-markdown.md') !== null);
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForFunction(() => window.scrollY <= 5);
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForFunction(() => window.scrollY >= 500);
+      expect(await page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(500);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('restores the last reading position after refreshing the same chapter', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.setItem('doc-pi:reading-position:/rich-markdown.md', '260'));
+      await page.evaluate(() => {
+        window.__docPiScrollToCalls = [];
+        const originalScrollTo = window.scrollTo.bind(window);
+        window.scrollTo = function (x, y) {
+          const top = typeof x === 'object' ? x.top : y;
+          window.__docPiScrollToCalls.push(top);
+          return originalScrollTo(x, y);
+        };
+        window.dispatchEvent(new Event('doc-pi:restore-reading-position'));
+      });
+      await page.waitForFunction(() => window.__docPiScrollToCalls?.includes(260));
+      expect(await page.evaluate(() => window.__docPiScrollToCalls)).toContain(260);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('clamps stale reading positions to the current chapter height', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await page.addInitScript(() => {
+        localStorage.setItem('doc-pi:reading-position:/sample-chapter.md', '999999');
+        window.__docPiScrollToCalls = [];
+        const originalScrollTo = window.scrollTo.bind(window);
+        window.scrollTo = function (x, y) {
+          const top = typeof x === 'object' ? x.top : y;
+          window.__docPiScrollToCalls.push(top);
+          return originalScrollTo(x, y);
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForFunction(() => window.__docPiScrollToCalls?.length > 0);
+      const state = await page.evaluate(() => {
+        const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+        return {
+          maxScroll,
+          attemptedTop: window.__docPiScrollToCalls[0],
+          scrollY: window.scrollY,
+        };
+      });
+      expect(state.attemptedTop).toBe(state.maxScroll);
+      expect(state.scrollY).toBeLessThanOrEqual(state.maxScroll);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('syncs sidebar search when browser history removes URL query', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md?q=footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.evaluate(() => {
+        window.history.pushState(window.history.state, '', window.location.pathname);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === '');
+      expect(new URL(page.url()).searchParams.get('q')).toBe(null);
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+      expect(await page.$eval('.doc-search-count', el => el.hidden)).toBe(true);
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('opens search in a centered overlay from the sidebar button and keyboard shortcut', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      expect(await page.$eval('.doc-search-overlay', el => el.hidden)).toBe(true);
+      const sidebarButton = await page.$eval('.doc-search-open', el => ({
+        text: el.textContent.trim(),
+        expanded: el.getAttribute('aria-expanded'),
+        controls: el.getAttribute('aria-controls'),
+        hasCommandIcon: Boolean(el.querySelector('.doc-search-open-icon')),
+      }));
+      expect(sidebarButton.text).toContain('搜索文档');
+      expect(sidebarButton.text).not.toContain('⌘');
+      expect(sidebarButton.hasCommandIcon).toBe(false);
+      expect(sidebarButton.expanded).toBe('false');
+      expect(sidebarButton.controls).toBe('doc-search-overlay');
+
+      await page.click('.doc-search-open');
+      await page.waitForSelector('.doc-search-overlay:not([hidden])');
+      expect(await page.$eval('.doc-search-open', el => el.getAttribute('aria-expanded'))).toBe('true');
+      expect(await page.$eval('.doc-search-overlay', el => el.getAttribute('role'))).toBe('dialog');
+      expect(await page.$eval('.doc-search-input', el => document.activeElement === el)).toBe(true);
+      const overlayLayout = await page.$eval('.doc-search-dialog', el => {
+        const rect = el.getBoundingClientRect();
+        return {
+          centerOffset: Math.round(Math.abs((rect.left + rect.width / 2) - window.innerWidth / 2)),
+          top: Math.round(rect.top),
+        };
+      });
+      expect(overlayLayout.centerOffset).toBeLessThanOrEqual(2);
+      expect(overlayLayout.top).toBeGreaterThan(48);
+
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-overlay')?.hidden === true);
+      expect(await page.$eval('.doc-search-open', el => document.activeElement === el)).toBe(true);
+
+      await page.keyboard.press('/');
+      await page.waitForSelector('.doc-search-overlay:not([hidden])');
+      expect(await page.$eval('.doc-search-input', el => document.activeElement === el)).toBe(true);
+
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-overlay')?.hidden === true);
+      await page.click('.markdown-content');
+      await page.keyboard.down('Meta');
+      await page.keyboard.press('Space');
+      await page.keyboard.up('Meta');
+      await page.waitForTimeout(120);
+      expect(await page.$eval('.doc-search-overlay', el => el.hidden)).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows shortcut guidance from the sidebar search help button', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      const controls = await page.$eval('.doc-search-controls', el => {
+        const search = el.querySelector('.doc-search-open').getBoundingClientRect();
+        const help = el.querySelector('.doc-search-shortcuts-open').getBoundingClientRect();
+        return {
+          helpLabel: el.querySelector('.doc-search-shortcuts-open')?.getAttribute('aria-label'),
+          expanded: el.querySelector('.doc-search-shortcuts-open')?.getAttribute('aria-expanded'),
+          searchRight: Math.round(search.right),
+          helpLeft: Math.round(help.left),
+        };
+      });
+      expect(controls.helpLabel).toBe('查看快捷键说明');
+      expect(controls.expanded).toBe('false');
+      expect(controls.helpLeft).toBeGreaterThanOrEqual(controls.searchRight + 6);
+
+      await page.click('.doc-search-shortcuts-open');
+      await page.waitForSelector('.doc-shortcuts-popover:not([hidden])');
+      const help = await page.$eval('.doc-shortcuts-popover', el => {
+        const searchDialog = document.querySelector('.doc-search-dialog');
+        return {
+          role: el.getAttribute('role'),
+          label: el.getAttribute('aria-label'),
+          text: el.textContent,
+          modal: el.getAttribute('aria-modal'),
+          width: Math.round(el.getBoundingClientRect().width),
+          centerOffset: Math.round(Math.abs((el.getBoundingClientRect().left + el.getBoundingClientRect().width / 2) - window.innerWidth / 2)),
+          borderRadius: getComputedStyle(el).borderRadius,
+          searchDialogBorderRadius: getComputedStyle(searchDialog).borderRadius,
+        };
+      });
+      expect(help.role).toBe('dialog');
+      expect(help.label).toBe('快捷键说明');
+      expect(help.modal).toBe('true');
+      expect(help.width).toBeGreaterThan(360);
+      expect(help.centerOffset).toBeLessThanOrEqual(2);
+      expect(help.borderRadius).toBe(help.searchDialogBorderRadius);
+      expect(help.text).toContain('/');
+      expect(help.text).toContain('打开搜索');
+      expect(help.text).toContain('Enter');
+      expect(help.text).toContain('打开选中结果');
+      expect(help.text).toContain('[');
+      expect(help.text).toContain('上一章');
+      expect(help.text).toContain(']');
+      expect(help.text).toContain('下一章');
+      expect(help.text).toContain('Esc');
+
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-shortcuts-overlay')?.hidden === true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('handles the slash search shortcut only once from the search overlay module', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => {
+        window.__docPiSearchOpenCount = 0;
+        const original = window.docPiOpenSearch;
+        window.docPiOpenSearch = function () {
+          window.__docPiSearchOpenCount += 1;
+          return original.apply(this, arguments);
+        };
+      });
+      await page.keyboard.press('/');
+      await page.waitForSelector('.doc-search-overlay:not([hidden])');
+      expect(await page.evaluate(() => window.__docPiSearchOpenCount)).toBe(1);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('opens Spotlight search results with Enter', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.click('.doc-search-open');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => new URL(location.href).hash === '#L3');
+      expect(new URL(page.url()).searchParams.get('q')).toBe('footnote');
+      expect(new URL(page.url()).hash).toBe('#L3');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('hides native search input clear control to avoid duplicate clear buttons', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      const inputAttrs = await page.$eval('.doc-search-input', el => ({
+        type: el.getAttribute('type'),
+        inputMode: el.getAttribute('inputmode'),
+        enterKeyHint: el.getAttribute('enterkeyhint'),
+      }));
+      expect(inputAttrs.type).toBe('text');
+      expect(inputAttrs.inputMode).toBe('search');
+      expect(inputAttrs.enterKeyHint).toBe('search');
+      expect(await page.$eval('.doc-search-clear', el => el.getAttribute('aria-label'))).toBe('清空搜索');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('syncs sidebar search when browser history restores URL query', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => {
+        window.history.pushState(window.history.state, '', window.location.pathname + '?q=footnote');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('footnote');
+      expect(new URL(page.url()).searchParams.get('q')).toBe('footnote');
+      expect(await page.$eval('.doc-search-count', el => el.textContent)).toBe('2');
+      expect(await page.$eval('.doc-search-status', el => el.textContent)).toBe('2 个结果');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('does not run a pending debounced search after clearing input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      const requestedQueries = [];
+      await page.route('**/api/search?q=*', async route => {
+        requestedQueries.push(new URL(route.request().url()).searchParams.get('q'));
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.click('.doc-search-clear');
+      await page.waitForTimeout(180);
+      expect(requestedQueries).toEqual([]);
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('does not run a pending debounced search after Escape clears input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      const requestedQueries = [];
+      await page.route('**/api/search?q=*', async route => {
+        requestedQueries.push(new URL(route.request().url()).searchParams.get('q'));
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.press('.doc-search-input', 'Escape');
+      await page.waitForTimeout(180);
+      expect(requestedQueries).toEqual([]);
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('aborts stale sidebar search requests', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        const originalFetch = window.fetch.bind(window);
+        window.__docPiSearchSignals = [];
+        window.fetch = (input, init = {}) => {
+          const url = String(input);
+          if (url.includes('/api/search?q=')) window.__docPiSearchSignals.push(init.signal || null);
+          return originalFetch(input, init);
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let releaseSlow;
+      const slowReleased = new Promise(resolve => { releaseSlow = resolve; });
+      await page.route('**/api/search?q=*', async route => {
+        const url = new URL(route.request().url());
+        if (url.searchParams.get('q') === 'slow') {
+          await slowReleased;
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) }).catch(() => {});
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'slow');
+      await page.waitForFunction(() => window.__docPiSearchSignals?.length === 1);
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForFunction(() => window.__docPiSearchSignals?.length === 2);
+      expect(await page.evaluate(() => window.__docPiSearchSignals[0]?.aborted)).toBe(true);
+      expect(await page.evaluate(() => window.__docPiSearchSignals[1]?.aborted)).toBe(false);
+      await page.waitForSelector('.doc-search-result');
+      releaseSlow();
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('aborts loading sidebar searches when cleared', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        const originalFetch = window.fetch.bind(window);
+        window.__docPiSearchSignals = [];
+        window.fetch = (input, init = {}) => {
+          const url = String(input);
+          if (url.includes('/api/search?q=')) window.__docPiSearchSignals.push(init.signal || null);
+          return originalFetch(input, init);
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let releaseSlow;
+      const slowReleased = new Promise(resolve => { releaseSlow = resolve; });
+      await page.route('**/api/search?q=*', async route => {
+        await slowReleased;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) }).catch(() => {});
+      });
+      await page.fill('.doc-search-input', 'slow');
+      await page.waitForFunction(() => window.__docPiSearchSignals?.length === 1);
+      await page.click('.doc-search-clear');
+      expect(await page.evaluate(() => window.__docPiSearchSignals[0]?.aborted)).toBe(true);
+      expect(await page.$eval('.doc-search-input-wrap', el => el.getAttribute('aria-busy'))).toBe('false');
+      expect(await page.$$('.doc-search-retry')).toHaveLength(0);
+      releaseSlow();
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('ignores stale sidebar search responses', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let releaseSlow;
+      const slowReleased = new Promise(resolve => { releaseSlow = resolve; });
+      await page.route('**/api/search?q=*', async route => {
+        const url = new URL(route.request().url());
+        const query = url.searchParams.get('q');
+        if (query === 'slow') {
+          await slowReleased;
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ file: 'slow.md', title: 'Slow Result', line: 1, snippet: 'stale slow result', tags: [] }] }) });
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'slow');
+      await page.waitForSelector('.doc-search-input-wrap.search-loading');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      const titleBeforeSlow = await page.$eval('.doc-search-result .doc-search-title', el => el.textContent);
+      releaseSlow();
+      await page.waitForTimeout(150);
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('footnote');
+      expect(await page.$eval('.doc-search-result .doc-search-title', el => el.textContent)).toBe(titleBeforeSlow);
+      expect(await page.$eval('.doc-search-status', el => el.textContent)).toBe('2 个结果');
+      expect(await page.$eval('.doc-search-count', el => el.textContent)).toBe('2');
+      expect(await page.$$('.doc-search-result')).toHaveLength(2);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('retries failed sidebar searches', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let attempts = 0;
+      await page.route('**/api/search?q=*', async route => {
+        attempts += 1;
+        if (attempts === 1) {
+          await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'forced failure' }) });
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-retry');
+      await page.click('.doc-search-retry');
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$$('.doc-search-retry')).toHaveLength(0);
+      expect(await page.$eval('.doc-search-input', el => el.getAttribute('aria-invalid'))).toBe('false');
+      await page.route('**/api/search?q=*', async route => {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'forced failure again' }) });
+      });
+      await page.fill('.doc-search-input', 'retry clear');
+      await page.waitForSelector('.doc-search-retry');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => document.querySelector('.doc-search-retry') === null);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows and clears sidebar search error state', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      let failSearch = true;
+      await page.route('**/api/search?q=*', async route => {
+        if (failSearch) {
+          await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'forced failure' }) });
+          return;
+        }
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-input-wrap.search-error');
+      expect(await page.$eval('.doc-search-input', el => el.getAttribute('aria-invalid'))).toBe('true');
+      expect(await page.$eval('.doc-search-status', el => el.textContent)).toContain('forced failure');
+      failSearch = false;
+      await page.fill('.doc-search-input', '');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-error'));
+      expect(await page.$eval('.doc-search-input', el => el.getAttribute('aria-invalid'))).toBe('false');
+      failSearch = true;
+      await page.fill('.doc-search-input', 'another failure');
+      await page.waitForSelector('.doc-search-input-wrap.search-error');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-error'));
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('toggles sidebar search help hints', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.click('.doc-search-open');
+      await page.click('.doc-search-help-toggle');
+      await page.waitForSelector('.doc-search-help:not([hidden])');
+      const helpText = await page.$eval('.doc-search-help', el => el.textContent);
+      expect(helpText).toContain('tag:<name>');
+      expect(helpText).toContain('/');
+      expect(helpText).toContain('↑/↓');
+      await page.click('.doc-search-help-toggle');
+      await page.waitForFunction(() => document.querySelector('.doc-search-help')?.hidden === true);
+      await page.click('.doc-search-help-toggle');
+      await page.waitForSelector('.doc-search-help:not([hidden])');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-help')?.hidden === true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('marks the keyboard-focused recent sidebar search as selected', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.setItem('doc-pi:recent-searches', JSON.stringify(['footnote'])));
+      await page.focus('.doc-search-input');
+      await page.waitForSelector('.doc-search-recent-item');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.querySelector('.doc-search-recent-item')?.getAttribute('aria-selected') === 'true');
+      await page.keyboard.press('ArrowDown');
+      await page.waitForFunction(() => {
+        const item = document.querySelector('.doc-search-recent-item');
+        const clear = document.querySelector('.doc-search-clear-recent');
+        return item?.getAttribute('aria-selected') === 'false' && clear?.getAttribute('aria-selected') === 'true';
+      });
+      await page.keyboard.press('ArrowUp');
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('.doc-search-recent-item, .doc-search-clear-recent')).every(item => item.getAttribute('aria-selected') === 'false'));
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('supports keyboard navigation for recent sidebar searches', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.setItem('doc-pi:recent-searches', JSON.stringify(['footnote'])));
+      await page.focus('.doc-search-input');
+      await page.waitForSelector('.doc-search-recent-item');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-recent-item'));
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-input'));
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === 'footnote');
+      await page.waitForSelector('.doc-search-result');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('clears recent sidebar searches without changing the current input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.setItem('doc-pi:recent-searches', JSON.stringify(['footnote'])));
+      await page.fill('.doc-search-input', 'draft query');
+      await page.focus('.doc-search-input');
+      await page.fill('.doc-search-input', '');
+      await page.waitForSelector('.doc-search-clear-recent');
+      await page.fill('.doc-search-input', 'draft query');
+      await page.click('.doc-search-clear-recent');
+      await page.waitForFunction(() => document.querySelector('.doc-search-recent-item') === null);
+      expect(await page.evaluate(() => localStorage.getItem('doc-pi:recent-searches'))).toBe(null);
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('draft query');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('stores only the committed search term after IME-style composition', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.clear());
+      await page.focus('.doc-search-input');
+      await page.route('**/api/search?q=*', async route => {
+        const query = new URL(route.request().url()).searchParams.get('q') || '';
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ file: 'sample-chapter.md', title: query, line: 1, snippet: query, tags: [], readingMinutes: 1, readingCount: 1 }] }) });
+      });
+      await page.dispatchEvent('.doc-search-input', 'compositionstart');
+      await page.fill('.doc-search-input', 'g');
+      await page.waitForTimeout(180);
+      await page.fill('.doc-search-input', 'gai');
+      await page.waitForTimeout(180);
+      await page.fill('.doc-search-input', "gai'n");
+      await page.waitForTimeout(180);
+      await page.fill('.doc-search-input', "gai'nian");
+      await page.waitForTimeout(180);
+      await page.fill('.doc-search-input', '概念');
+      await page.dispatchEvent('.doc-search-input', 'compositionend');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => {
+        const raw = localStorage.getItem('doc-pi:recent-searches');
+        return raw && JSON.parse(raw)[0] === '概念';
+      });
+      expect(await page.evaluate(() => JSON.parse(localStorage.getItem('doc-pi:recent-searches')))).toEqual(['概念']);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows recent sidebar searches and reruns them on click', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => localStorage.clear());
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.click('.doc-search-clear');
+      await page.focus('.doc-search-input');
+      await page.waitForSelector('.doc-search-recent-item');
+      expect(await page.$$eval('.doc-search-recent-item', items => items.map(item => item.textContent))).toEqual(['footnote']);
+      await page.click('.doc-search-recent-item');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$$('.doc-search-recent-item')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows helpful empty state for sidebar searches without results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs not-present-anywhere');
+      await page.waitForSelector('.doc-search-empty');
+      expect(await page.$eval('.doc-search-empty-title', el => el.textContent)).toBe('无匹配结果');
+      expect(await page.$eval('.doc-search-empty-hint', el => el.textContent)).toContain('减少关键词');
+      expect(await page.$eval('.doc-search-empty-filter-hint', el => el.textContent)).toContain('点击上方标签过滤条件');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => document.querySelector('.doc-search-empty') === null);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows and clears sidebar search loading state', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.route('**/api/search?q=*', async route => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await route.continue();
+      });
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-input-wrap.search-loading');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-loading'));
+      await page.fill('.doc-search-input', 'another query');
+      await page.waitForSelector('.doc-search-input-wrap.search-loading');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => !document.querySelector('.doc-search-input-wrap')?.classList.contains('search-loading'));
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('clears sidebar search with the clear button', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForSelector('.doc-search-clear:not([hidden])');
+      await page.click('.doc-search-clear');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === '');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+      expect(await page.$$('.doc-search-filter-chip')).toHaveLength(0);
+      expect(await page.$eval('.doc-search-count', el => el.hidden)).toBe(true);
+      expect(new URL(page.url()).searchParams.has('q')).toBe(false);
+      expect(await page.$eval('.doc-search-input', el => document.activeElement === el)).toBe(true);
+      expect(await page.$eval('.doc-search-clear', el => el.hidden)).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows a sidebar search result count badge', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => document.querySelector('.doc-search-count')?.textContent === '2');
+      expect(await page.$eval('.doc-search-count', el => el.getAttribute('aria-label'))).toBe('2 个搜索结果');
+      await page.fill('.doc-search-input', 'not-present-anywhere');
+      await page.waitForFunction(() => document.querySelector('.doc-search-count')?.textContent === '0');
+      expect(await page.$eval('.doc-search-count', el => el.getAttribute('aria-label'))).toBe('0 个搜索结果');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-count')?.hidden === true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('restores sidebar search from the URL query parameter', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md?q=tag%3Adocs%20footnote');
+      await page.waitForSelector('.doc-search-result');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('tag:docs footnote');
+      expect(await page.$$eval('.doc-search-filter-chip', chips => chips.map(chip => chip.textContent))).toEqual(['tag:docs']);
+      expect(new URL(page.url()).searchParams.get('q')).toBe('tag:docs footnote');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('keeps the URL query parameter in sync with sidebar search input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.waitForFunction(() => new URL(location.href).searchParams.get('q') === 'footnote');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !new URL(location.href).searchParams.has('q'));
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('marks the keyboard-focused sidebar search result as selected', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.querySelectorAll('.doc-search-result')[0]?.getAttribute('aria-selected') === 'true');
+      await page.keyboard.press('ArrowDown');
+      await page.waitForFunction(() => {
+        const results = document.querySelectorAll('.doc-search-result');
+        return results[0]?.getAttribute('aria-selected') === 'false' && results[1]?.getAttribute('aria-selected') === 'true';
+      });
+      await page.keyboard.press('ArrowUp');
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('.doc-search-result')).every(result => result.getAttribute('aria-selected') === 'false'));
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('keeps keyboard-selected sidebar search results visible', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        window.__docPiScrollIntoViewCalls = [];
+        Element.prototype.scrollIntoView = function (options) {
+          window.__docPiScrollIntoViewCalls.push({
+            className: this.className,
+            block: options && options.block,
+            inline: options && options.inline,
+          });
+        };
+      });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.route('**/api/search?q=*', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          query: 'many',
+          results: Array.from({ length: 12 }, (_, index) => ({
+            file: 'rich-markdown.md',
+            line: index + 1,
+            title: 'Result ' + (index + 1),
+            snippet: 'Search result ' + (index + 1),
+            tags: [],
+          })),
+        }),
+      }));
+      await page.fill('.doc-search-input', 'many');
+      await page.waitForSelector('.doc-search-result');
+      await page.$eval('.doc-search-results', el => {
+        el.style.maxHeight = '84px';
+        el.style.overflowY = 'auto';
+      });
+      await page.press('.doc-search-input', 'ArrowDown');
+      for (let index = 0; index < 8; index += 1) {
+        await page.keyboard.press('ArrowDown');
+      }
+      await page.waitForFunction(() => document.querySelectorAll('.doc-search-result')[8]?.classList.contains('search-selected'));
+      const scrollCalls = await page.evaluate(() => window.__docPiScrollIntoViewCalls);
+      expect(scrollCalls.some(call => String(call.className).includes('doc-search-result') && call.block === 'nearest')).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('supports keyboard navigation in sidebar search results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-result'));
+      await page.keyboard.press('ArrowUp');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-input'));
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === '');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('removes tag filter tokens when clicking query chips', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-filter-chip');
+      await page.click('.doc-search-filter-chip');
+      await page.waitForFunction(() => document.querySelector('.doc-search-input')?.value === 'footnote');
+      expect(await page.$$('.doc-search-filter-chip')).toHaveLength(0);
+      await page.waitForSelector('.doc-search-result');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows active tag filter chips for tag searches only', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-filter-chip');
+      expect(await page.$$eval('.doc-search-filter-chip', chips => chips.map(chip => chip.textContent))).toEqual(['tag:docs']);
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForFunction(() => document.querySelectorAll('.doc-search-filter-chip').length === 0);
+      expect(await page.$$('.doc-search-result')).not.toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('filters sidebar search results by tag tokens', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-result');
+      const firstResult = await page.$eval('.doc-search-result', item => ({
+        text: item.textContent,
+        tags: Array.from(item.querySelectorAll('.doc-search-tag')).map(tag => tag.textContent),
+      }));
+      expect(firstResult.text).toContain('Rich Metadata Title');
+      expect(firstResult.tags).toEqual(['docs', 'guide']);
+      await page.fill('.doc-search-input', 'tag:missing footnote');
+      await page.waitForFunction(() => document.querySelector('.doc-search-status')?.textContent === '无匹配结果');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('highlights matched text in sidebar search snippets', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'tag:docs footnote');
+      await page.waitForSelector('.doc-search-snippet-hit');
+      const firstHit = await page.$eval('.doc-search-snippet-hit', el => ({
+        text: el.textContent,
+        tagName: el.tagName,
+      }));
+      expect(firstHit).toEqual({ text: 'footnote', tagName: 'MARK' });
+      expect(await page.$$eval('.doc-search-filter-chip .doc-search-snippet-hit', hits => hits.length)).toBe(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows frontmatter tags and reading stats in sidebar search results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.fill('.doc-search-input', 'footnote');
+      await page.waitForSelector('.doc-search-tag');
+      const result = await page.$eval('.doc-search-result', item => ({
+        tags: Array.from(item.querySelectorAll('.doc-search-tag')).map(tag => tag.textContent),
+        stats: item.querySelector('.doc-search-reading-stats')?.textContent,
+      }));
+      expect(result.tags).toEqual(['docs', 'guide']);
+      expect(result.stats).toBe('约 1 分钟 · 98 字');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('preserves ordinary heading hashes when clearing sidebar search', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.evaluate(() => history.replaceState(history.state, '', location.pathname + '#sample-chapter-for-testing'));
+      expect(new URL(page.url()).hash).toBe('#sample-chapter-for-testing');
+      await page.fill('.doc-search-input', 'blockquote');
+      await page.waitForSelector('.doc-search-result');
+      await page.fill('.doc-search-input', '');
+      await page.waitForFunction(() => !new URL(location.href).searchParams.has('q') && document.querySelectorAll('.doc-search-result').length === 0);
+      const clearedUrl = new URL(page.url());
+      expect(clearedUrl.searchParams.get('q')).toBe(null);
+      expect(clearedUrl.hash).toBe('#sample-chapter-for-testing');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('activates search line targets from keyboard-selected results', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.fill('.doc-search-input', 'blockquote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-result'));
+      await page.keyboard.press('Enter');
+      await page.waitForURL(/sample-chapter\.md/);
+      expect(page.url()).toContain('q=blockquote');
+      expect(page.url()).toContain('#L18');
+      await page.waitForSelector('.doc-search-line-target.line-target-active', { state: 'attached' });
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(true);
+      await page.waitForSelector('.doc-search-hit', { state: 'attached' });
+      expect(await page.$eval('.doc-search-hit', el => el.textContent.toLowerCase())).toBe('blockquote');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('clears keyboard-created search presentation with Escape', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.fill('.doc-search-input', 'blockquote');
+      await page.waitForSelector('.doc-search-result');
+      await page.press('.doc-search-input', 'ArrowDown');
+      await page.waitForFunction(() => document.activeElement?.classList.contains('doc-search-result'));
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => location.hash === '#L18');
+      await page.waitForSelector('.doc-search-line-target.line-target-active', { state: 'attached' });
+      await page.waitForSelector('.doc-search-hit', { state: 'attached' });
+      await page.focus('.doc-search-input');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !new URL(location.href).searchParams.has('q') && location.hash === '');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      expect(await page.$$('.doc-search-result')).toHaveLength(0);
+      expect(await page.$eval('#L18', el => el.classList.contains('line-target-active'))).toBe(false);
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(false);
+      expect(await page.$$('.doc-search-hit')).toHaveLength(0);
+      expect(await page.$eval('.markdown-content', el => el.textContent.includes('A blockquote for testing.'))).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('searches markdown content from the sidebar', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.fill('.doc-search-input', 'blockquote');
+      await page.waitForSelector('.doc-search-result');
+      const resultText = await page.$eval('.doc-search-result', el => el.textContent);
+      expect(resultText).toContain('Sample Chapter for Testing');
+      expect(resultText).toContain('A blockquote for testing');
+      await page.click('.doc-search-result');
+      await page.waitForURL(/sample-chapter\.md/);
+      expect(page.url()).toContain('sample-chapter.md');
+      expect(page.url()).toContain('q=blockquote');
+      expect(page.url()).toContain('#L18');
+      await page.waitForSelector('#L18.doc-search-line-target', { state: 'attached' });
+      await page.waitForSelector('.doc-search-line-target.line-target-active', { state: 'attached' });
+      expect(await page.$eval('#L18', el => el.getAttribute('aria-label'))).toBe('搜索结果第 18 行');
+      expect(await page.$eval('#L18', el => el.getAttribute('tabindex'))).toBe('-1');
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(true);
+      await page.waitForSelector('.doc-search-hit', { state: 'attached' });
+      const highlightedText = await page.$eval('.doc-search-hit', el => el.textContent);
+      expect(highlightedText.toLowerCase()).toBe('blockquote');
+      await page.fill('.doc-search-input', '');
+      await page.waitForTimeout(150);
+      const clearedUrl = new URL(page.url());
+      expect(clearedUrl.searchParams.get('q')).toBe(null);
+      expect(clearedUrl.hash).toBe('');
+      expect(await page.$eval('#L18', el => el.classList.contains('line-target-active'))).toBe(false);
+      expect(await page.$eval('#L18', el => document.activeElement === el)).toBe(false);
+      expect(await page.$$('.doc-search-hit')).toHaveLength(0);
+      expect(await page.$eval('.markdown-content', el => el.textContent.includes('A blockquote for testing.'))).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('labels fenced code block languages without overlapping copy controls', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForSelector('.code-language-label');
+      expect(await page.$eval('.code-language-label', el => el.textContent)).toBe('javascript');
+      expect(await page.$$eval('.markdown-content p code .code-language-label', labels => labels.length)).toBe(0);
+      const positions = await page.evaluate(() => {
+        const label = document.querySelector('.code-language-label').getBoundingClientRect();
+        const button = document.querySelector('.code-copy-button').getBoundingClientRect();
+        return { labelRight: label.right, buttonLeft: button.left };
+      });
+      expect(positions.labelRight).toBeLessThanOrEqual(positions.buttonLeft - 4);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('copies fenced code blocks without adding buttons to inline code', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        window.__copiedText = null;
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: async text => { window.__copiedText = text; },
+          },
+        });
+      });
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForSelector('.code-copy-button');
+      expect(await page.$$eval('.markdown-content p code .code-copy-button', buttons => buttons.length)).toBe(0);
+      await page.click('.code-copy-button');
+      expect(await page.evaluate(() => window.__copiedText)).toBe("console.log('hello world');");
+      const state = await page.$eval('.code-copy-button', el => ({ text: el.textContent, copied: el.classList.contains('copied') }));
+      expect(state.text).toBe('已复制');
+      expect(state.copied).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('uses print-friendly layout and hides interactive chrome', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.emulateMedia({ media: 'print' });
+      const printState = await page.evaluate(() => {
+        const displayOf = selector => getComputedStyle(document.querySelector(selector)).display;
+        const mainStyle = getComputedStyle(document.querySelector('.main'));
+        return {
+          sidebarDisplay: displayOf('.sidebar'),
+          floatingActionsDisplay: displayOf('.floating-actions'),
+          backToTopDisplay: displayOf('.back-to-top'),
+          readingProgressDisplay: displayOf('.reading-progress'),
+          mainMarginLeft: mainStyle.marginLeft,
+          mainMaxWidth: mainStyle.maxWidth,
+          contentVisible: getComputedStyle(document.querySelector('.markdown-content')).display !== 'none',
+        };
+      });
+      expect(printState.sidebarDisplay).toBe('none');
+      expect(printState.floatingActionsDisplay).toBe('none');
+      expect(printState.backToTopDisplay).toBe('none');
+      expect(printState.readingProgressDisplay).toBe('none');
+      expect(printState.mainMarginLeft).toBe('0px');
+      expect(printState.mainMaxWidth).toBe('none');
+      expect(printState.contentVisible).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows a back-to-top button after scrolling and returns to top', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.back-to-top', { state: 'attached' });
+      expect(await page.$eval('.back-to-top', el => el.hidden)).toBe(true);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForFunction(() => window.scrollY > 300 && !document.querySelector('.back-to-top')?.hidden);
+      const layout = await page.evaluate(() => {
+        window.__core__.floating.addButton({ id: 'test-floating-action', label: 'Test action', icon: 'T', onClick: () => {} });
+        const back = document.querySelector('.back-to-top').getBoundingClientRect();
+        const floating = document.querySelector('.floating-actions').getBoundingClientRect();
+        return {
+          back: { left: back.left, right: back.right, width: back.width, height: back.height, top: back.top, bottom: back.bottom },
+          floating: { left: floating.left, right: floating.right, width: floating.width, top: floating.top, bottom: floating.bottom },
+        };
+      });
+      expect(layout.back.left).toBeGreaterThan(260);
+      expect(layout.back.right).toBeLessThanOrEqual(900);
+      expect(layout.back.width).toBe(layout.back.height);
+      expect(layout.back.width).toBe(layout.floating.width);
+      expect(Math.abs(layout.back.left - layout.floating.left)).toBeLessThanOrEqual(1);
+      expect(layout.back.bottom).toBeLessThanOrEqual(layout.floating.top - 8);
+      await page.click('.back-to-top');
+      await page.waitForFunction(() => window.scrollY <= 5);
+      expect(await page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(5);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('updates reading progress while scrolling', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.reading-progress', { state: 'attached' });
+      const initial = await page.$eval('.reading-progress', el => Number(el.style.getPropertyValue('--reading-progress')));
+      expect(initial).toBeLessThanOrEqual(5);
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.reading-progress')).getPropertyValue('--reading-progress')) > 90);
+      const scrolled = await page.$eval('.reading-progress', el => Number(getComputedStyle(el).getPropertyValue('--reading-progress')));
+      expect(scrolled).toBeGreaterThan(90);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('supports reader keyboard shortcuts without hijacking text input', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.keyboard.press('/');
+      const focusedClass = await page.evaluate(() => document.activeElement?.className || '');
+      expect(focusedClass).toContain('doc-search-input');
+      await page.keyboard.type('blockquote');
+      await page.waitForSelector('.doc-search-result');
+      await page.keyboard.press('Escape');
+      expect(await page.$eval('.doc-search-input', el => el.value)).toBe('');
+      await page.fill('.doc-search-input', 'literal ] text');
+      await page.keyboard.press(']');
+      expect(page.url()).toContain('/sample-chapter.md');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('copies full heading links when clicking heading anchors', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.addInitScript(() => {
+        window.__copiedText = null;
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: {
+            writeText: async text => { window.__copiedText = text; },
+          },
+        });
+      });
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.click('.markdown-content h1 .heading-anchor');
+      const copied = await page.evaluate(() => window.__copiedText);
+      expect(copied).toBe(`${server.baseUrl}/sample-chapter.md#sample-chapter-for-testing`);
+      const label = await page.$eval('.markdown-content h1 .heading-anchor', el => el.getAttribute('aria-label'));
+      expect(label).toBe('Copied heading link');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('renders copyable heading anchor links', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      const href = await page.$eval('.markdown-content h1 .heading-anchor', el => el.getAttribute('href'));
+      expect(href).toBe('#sample-chapter-for-testing');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('marks the current sidebar chapter as active', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      const activeChapter = await page.$eval('.toc-nav a.chapter-active', el => ({
+        href: el.getAttribute('href'),
+        position: el.querySelector('.toc-chapter-position')?.textContent,
+        positionLabel: el.querySelector('.toc-chapter-position')?.getAttribute('aria-label'),
+      }));
+      expect(activeChapter.href).toBe('/sample-chapter.md');
+      expect(activeChapter.position).toBe('2/2');
+      expect(activeChapter.positionLabel).toBe('当前第 2 章，共 2 章');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('prioritizes article headings above the chapter list in the sidebar', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      const tocLayout = await page.$eval('.toc-nav', nav => {
+        const lists = Array.from(nav.querySelectorAll(':scope > ul'));
+        const firstListFirstHref = lists[0]?.querySelector('a')?.getAttribute('href');
+        const secondListFirstHref = lists[1]?.querySelector('a')?.getAttribute('href');
+        const firstListBottom = lists[0]?.getBoundingClientRect().bottom ?? 0;
+        const secondListTop = lists[1]?.getBoundingClientRect().top ?? 0;
+        return { count: lists.length, firstListFirstHref, secondListFirstHref, gap: Math.round(secondListTop - firstListBottom) };
+      });
+      expect(tocLayout.count).toBeGreaterThanOrEqual(2);
+      expect(tocLayout.firstListFirstHref).toBe('/sample-chapter.md#sample-chapter-for-testing');
+      expect(tocLayout.secondListFirstHref).toBe('/rich-markdown.md');
+      expect(tocLayout.gap).toBeGreaterThanOrEqual(8);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('labels compact chapter navigation links for adjacent markdown files', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content > .chapter-nav:not(.chapter-nav-bottom)');
+      const nav = await page.$eval('.markdown-content > .chapter-nav:not(.chapter-nav-bottom)', el => ({
+        previous: el.querySelector('.nav-prev')?.getAttribute('href'),
+        previousLabel: el.querySelector('.nav-prev')?.getAttribute('aria-label'),
+        next: el.querySelector('.nav-next')?.getAttribute('href'),
+        nextLabel: el.querySelector('.nav-next')?.getAttribute('aria-label'),
+        text: el.textContent,
+      }));
+      expect(nav.previous).toBe('/README.md');
+      expect(nav.previousLabel).toBe('上一章 README');
+      expect(nav.next).toBe('/sample-chapter.md');
+      expect(nav.nextLabel).toBe('下一章 sample-chapter');
+      expect(nav.text).toContain('README');
+      expect(nav.text).toContain('sample-chapter');
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows disabled bottom chapter navigation edge states', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/README.md');
+      await page.waitForSelector('.markdown-content .chapter-nav-bottom');
+      const firstNav = await page.$eval('.markdown-content .chapter-nav-bottom', el => ({
+        disabledPrevText: el.querySelector('.nav-prev.nav-disabled')?.textContent,
+        disabledPrevAria: el.querySelector('.nav-prev.nav-disabled')?.getAttribute('aria-disabled'),
+        disabledPrevHref: el.querySelector('.nav-prev.nav-disabled')?.getAttribute('href'),
+        next: el.querySelector('.nav-next:not(.nav-disabled)')?.getAttribute('href'),
+      }));
+      expect(firstNav.disabledPrevText).toContain('已是第一章');
+      expect(firstNav.disabledPrevAria).toBe('true');
+      expect(firstNav.disabledPrevHref).toBe(null);
+      expect(firstNav.next).toBe('/rich-markdown.md');
+
+      await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
+      await page.waitForSelector('.markdown-content .chapter-nav-bottom');
+      const lastNav = await page.$eval('.markdown-content .chapter-nav-bottom', el => ({
+        prev: el.querySelector('.nav-prev:not(.nav-disabled)')?.getAttribute('href'),
+        disabledNextText: el.querySelector('.nav-next.nav-disabled')?.textContent,
+        disabledNextAria: el.querySelector('.nav-next.nav-disabled')?.getAttribute('aria-disabled'),
+        disabledNextHref: el.querySelector('.nav-next.nav-disabled')?.getAttribute('href'),
+      }));
+      expect(lastNav.prev).toBe('/rich-markdown.md');
+      expect(lastNav.disabledNextText).toContain('已是最后一章');
+      expect(lastNav.disabledNextAria).toBe('true');
+      expect(lastNav.disabledNextHref).toBe(null);
+    } finally {
+      await page.close();
+    }
+  });
+
+  it('shows bottom chapter navigation for adjacent markdown files', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content .chapter-nav-bottom');
+      const nav = await page.$eval('.markdown-content .chapter-nav-bottom', el => {
+        const topNav = document.querySelector('.markdown-content > .chapter-nav:not(.chapter-nav-bottom)');
+        return {
+          label: el.getAttribute('aria-label'),
+          previous: el.querySelector('.nav-prev')?.getAttribute('href'),
+          previousLabel: el.querySelector('.nav-prev')?.getAttribute('aria-label'),
+          positionText: el.querySelector('.chapter-nav-position')?.textContent,
+          positionLabel: el.querySelector('.chapter-nav-position')?.getAttribute('aria-label'),
+          next: el.querySelector('.nav-next')?.getAttribute('href'),
+          nextLabel: el.querySelector('.nav-next')?.getAttribute('aria-label'),
+          text: el.textContent,
+          previousHint: el.querySelector('.nav-prev em')?.textContent,
+          nextHint: el.querySelector('.nav-next em')?.textContent,
+          topBackground: getComputedStyle(topNav).backgroundColor,
+          bottomBackground: getComputedStyle(el).backgroundColor,
+          topBorderRadius: getComputedStyle(topNav).borderRadius,
+          bottomBorderRadius: getComputedStyle(el).borderRadius,
+        };
+      });
+      expect(nav.label).toBe('章节导航');
+      expect(nav.previous).toBe('/README.md');
+      expect(nav.previousLabel).toBe('上一章 README，快捷键 [');
+      expect(nav.positionText).toBe('第 2 / 3 章');
+      expect(nav.positionLabel).toBe('当前第 2 章，共 3 章');
+      expect(nav.next).toBe('/sample-chapter.md');
+      expect(nav.nextLabel).toBe('下一章 sample-chapter，快捷键 ]');
+      expect(nav.text).toContain('上一章');
+      expect(nav.text).toContain('下一章');
+      expect(nav.previousHint).toBe(undefined);
+      expect(nav.nextHint).toBe(undefined);
+      expect(nav.topBackground).toBe(nav.bottomBackground);
+      expect(nav.topBorderRadius).toBe(nav.bottomBorderRadius);
+    } finally {
+      await page.close();
+    }
+  });
+
   it('loads chapter page with sidebar and markdown content', async () => {
     const page = await browser.newPage();
     try {
       await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
       expect(await page.$('.sidebar')).not.toBeNull();
       expect(await page.$('.markdown-content')).not.toBeNull();
-      const h1 = await page.$eval('.markdown-content h1', el => el.textContent.trim());
+      const h1 = await page.$eval('.markdown-content h1', el => el.childNodes[0].textContent.trim());
       const paragraph = await page.$eval('.markdown-content p', el => el.textContent.trim());
+      expect(await page.title()).toBe('sample-chapter.md - Fixtures');
       expect(h1).toBe('Sample Chapter for Testing');
       expect(paragraph).toContain('This is a test paragraph');
     } finally {
