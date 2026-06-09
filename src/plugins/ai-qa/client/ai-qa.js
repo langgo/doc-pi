@@ -9,6 +9,9 @@
   var messagesEl = null;
   var textarea = null;
   var sendBtn = null;
+  var stopBtn = null;
+  var activeReader = null;
+  var stopRequested = false;
   var contextEl = null;
   var sessionBarEl = null;
   var sessionSelectEl = null;
@@ -17,6 +20,7 @@
   var btnDeleteEl = null;
   var escapeHtml = null;
   var markdownRenderer = null;
+  var inlineMarkdownRenderer = null;
   var sourceLocator = null;
   var annotateSource = null;
   var clearSourceAnnotation = null;
@@ -29,6 +33,7 @@
   var annotationSeq = 0;
   var annotationCount = 0;
   var historyAnnotationIds = [];
+  var resumeOffset = 0;
 
   // Current selection context
   var currentContext = {
@@ -307,11 +312,13 @@
       '<div class="ai-qa-input-area">' +
       '<textarea placeholder="输入你的问题..." rows="1"></textarea>' +
       '<button class="btn-send">发送</button>' +
+      '<button class="btn-stop" type="button" hidden>停止</button>' +
       '</div>';
 
     messagesEl = container.querySelector('.ai-qa-messages');
     textarea = container.querySelector('textarea');
     sendBtn = container.querySelector('.btn-send');
+    stopBtn = container.querySelector('.btn-stop');
     contextEl = container.querySelector('.ai-qa-context');
     sessionBarEl = container.querySelector('.ai-qa-session-bar');
     sessionSelectEl = container.querySelector('.ai-qa-session-select');
@@ -322,6 +329,7 @@
     contextEl.querySelector('.btn-clear-context').addEventListener('click', clearContext);
 
     sendBtn.addEventListener('click', sendMessage);
+    stopBtn.addEventListener('click', stopGeneration);
     textarea.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -366,6 +374,8 @@
 
     // If we have a stored conversationId, try to restore it
     if (conversationId) {
+      var resumed = await resumeConversation(conversationId);
+      if (resumed) return;
       var conv = await loadConversation(conversationId);
       if (conv) {
         renderHistoryMessages(conv.messages);
@@ -380,14 +390,16 @@
     if (sessions.length > 0) {
       saveConversationId(sessions[0].id);
       var firstConv = await loadConversation(sessions[0].id);
-      if (firstConv) renderHistoryMessages(firstConv.messages);
+      if (!(await resumeConversation(sessions[0].id)) && firstConv) {
+        renderHistoryMessages(firstConv.messages);
+      }
     }
   }
 
   async function renderHistory(id) {
     var conv = await loadConversation(id);
     if (conv) {
-      renderHistoryMessages(conv.messages);
+      if (!(await resumeConversation(id))) renderHistoryMessages(conv.messages);
     }
   }
 
@@ -442,7 +454,7 @@
       if (msg.role === 'user') {
         addUserMessage(msg.content, annotateHistoryUserMessage(msg));
       } else if (msg.role === 'assistant') {
-        addAssistantMessage(msg.content, msg.thinking || null);
+        addAssistantMessage(msg.content, msg.thinking || null, msg.status === 'streaming', msg.tools || null, msg.segments || null);
       }
     }
   }
@@ -521,24 +533,140 @@
     return msg;
   }
 
-  function addAssistantMessage(text, thinking) {
+  function createLoadingDots(kind) {
+    var loading = document.createElement('span');
+    loading.className = 'ai-qa-node-loading';
+    loading.dataset.loadingFor = kind || 'assistant';
+    loading.setAttribute('aria-label', '加载中');
+    loading.innerHTML = '<span></span><span></span><span></span>';
+    return loading;
+  }
+
+  function setAssistantLoading(msgEl, visible) {
+    if (!msgEl) return;
+    var loading = msgEl.querySelector(':scope > .ai-qa-node-loading[data-loading-for="assistant"]');
+    if (visible && !loading) msgEl.appendChild(createLoadingDots('assistant'));
+    else if (!visible && loading) loading.remove();
+  }
+
+  function setNodeLoading(nodeEl, kind, visible) {
+    if (!nodeEl) return;
+    var selector = '.ai-qa-node-loading[data-loading-for="' + kind + '"]';
+    var loading = nodeEl.querySelector(selector);
+    var summary = nodeEl.querySelector('summary');
+    if (visible && !loading) {
+      var dots = createLoadingDots(kind);
+      if (summary) summary.classList.add('has-node-loading');
+      if (summary) summary.appendChild(dots);
+      else nodeEl.appendChild(dots);
+    } else if (!visible && loading) {
+      loading.remove();
+      if (summary) summary.classList.remove('has-node-loading');
+    }
+  }
+
+  function formatToolValue(value) {
+    if (value === undefined) return '';
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value, null, 2); }
+    catch (_) { return String(value); }
+  }
+
+  function renderToolDisplay(toolState) {
+    if (!toolState) return '';
+    var lines = [];
+    if (toolState.name && toolState.name !== 'tool') lines.push('工具：' + toolState.name);
+    if (toolState.args !== undefined) lines.push('参数：\n' + formatToolValue(toolState.args));
+    if (toolState.status === 'running') lines.push('状态：执行中');
+    else if (toolState.status === 'error') lines.push('状态：失败');
+    else if (toolState.status === 'done') lines.push('状态：完成');
+    if (toolState.result !== undefined) lines.push('结果：\n' + formatToolValue(toolState.result));
+    if (toolState.error) lines.push('错误：\n' + formatToolValue(toolState.error));
+    return lines.join('\n\n');
+  }
+
+  function mergeToolState(current, tool, label) {
+    var next = current || { name: 'tool', status: 'running' };
+    if (tool.name) next.name = tool.name;
+    if (tool.id) next.id = tool.id;
+    if (tool.contentIndex !== undefined) next.contentIndex = tool.contentIndex;
+    if (tool.args !== undefined) next.args = tool.args;
+    if (tool.arguments !== undefined) next.args = tool.arguments;
+    if (tool.result !== undefined) next.result = tool.result;
+    if (tool.error !== undefined) next.error = tool.error;
+    if (tool.isError) next.status = 'error';
+    else if (label === 'execution_end' || tool.status === 'done') next.status = 'done';
+    else next.status = 'running';
+    return next;
+  }
+
+  function toolSummaryText(tool) {
+    if (!tool) return '工具调用';
+    var name = tool.name || tool.id || 'tool';
+    var target = tool.args && tool.args.path ? ' ' + tool.args.path : '';
+    return '工具调用 ' + name + target;
+  }
+
+  function appendTreeText(container, className, text) {
+    if (!container || !text) return null;
+    var last = container.lastElementChild;
+    if (last && last.className === className) {
+      last.dataset.rawText = (last.dataset.rawText || '') + text;
+      last.innerHTML = renderMarkdown(last.dataset.rawText);
+      return last;
+    }
+    var item = document.createElement('div');
+    item.className = className;
+    item.dataset.rawText = text;
+    item.innerHTML = renderMarkdown(text);
+    container.appendChild(item);
+    return item;
+  }
+
+  function ensureTreeItems(sectionEl) {
+    var items = sectionEl.querySelector(':scope > .ai-qa-tree-items');
+    if (!items) {
+      items = document.createElement('div');
+      items.className = 'ai-qa-tree-items';
+      sectionEl.appendChild(items);
+    }
+    return items;
+  }
+
+  function addAssistantMessage(text, thinking, streaming, tools, segments) {
     if (!messagesEl) return;
     var empty = messagesEl.querySelector('.empty-state');
     if (empty) empty.remove();
 
     var msg = document.createElement('div');
-    msg.className = 'ai-qa-message assistant';
+    msg.className = 'ai-qa-message assistant' + (streaming ? ' streaming' : '');
 
-    if (thinking) {
-      var details = document.createElement('details');
-      details.className = 'ai-qa-thinking';
-      details.innerHTML = '<summary><span>思考过程</span><span class="thinking-hint">点击展开</span></summary><pre>' + escapeHtml(thinking) + '</pre>';
-      msg.appendChild(details);
+    if (segments && segments.length) {
+      renderAssistantSegments(msg, segments);
+    } else {
+      if (thinking) {
+        var details = addThinkingBlock(msg);
+        appendToThinkingBlock(details, thinking);
+        finalizeThinkingBlock(details);
+      }
+
+      if (tools && tools.length) {
+        var fallbackTool = addToolCallBlock(ensureThinkingItems(msg), tools[tools.length - 1]);
+        for (var toolIndex = 0; toolIndex < tools.length; toolIndex++) {
+          appendToToolBlock(fallbackTool, tools[toolIndex], tools[toolIndex].status || 'done');
+        }
+        finalizeToolBlock(fallbackTool);
+      }
     }
 
     var body = document.createElement('div');
+    body.className = 'ai-qa-message-body';
     body.innerHTML = renderMarkdown(text);
     msg.appendChild(body);
+    if (streaming) {
+      msg.dataset.rawMarkdown = text || '';
+      setAssistantLoading(msg, true);
+    }
 
     messagesEl.appendChild(msg);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -600,7 +728,7 @@
 
     var question = document.createElement('div');
     question.className = 'message-question';
-    question.innerHTML = renderMarkdown(text);
+    question.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
     msg.appendChild(question);
 
     messagesEl.appendChild(msg);
@@ -616,6 +744,10 @@
     var msg = document.createElement('div');
     msg.className = 'ai-qa-message assistant streaming';
     msg.dataset.rawMarkdown = '';
+    var body = document.createElement('div');
+    body.className = 'ai-qa-message-body';
+    msg.appendChild(body);
+    setAssistantLoading(msg, true);
     messagesEl.appendChild(msg);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return msg;
@@ -625,31 +757,135 @@
     if (!msgEl) return;
     var raw = (msgEl.dataset.rawMarkdown || '') + delta;
     msgEl.dataset.rawMarkdown = raw;
-    msgEl.innerHTML = renderMarkdown(raw);
+    var body = msgEl.querySelector('.ai-qa-message-body');
+    if (!body) {
+      body = document.createElement('div');
+      body.className = 'ai-qa-message-body';
+      var loading = msgEl.querySelector(':scope > .ai-qa-node-loading[data-loading-for="assistant"]');
+      if (loading) msgEl.insertBefore(body, loading);
+      else msgEl.appendChild(body);
+    }
+    body.innerHTML = renderMarkdown(raw);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
-  function addThinkingBlock() {
-    if (!messagesEl) return null;
+  function addThinkingBlock(parent) {
+    var target = parent || messagesEl;
+    if (!target) return null;
     var empty = messagesEl.querySelector('.empty-state');
     if (empty) empty.remove();
 
     var details = document.createElement('details');
     details.className = 'ai-qa-thinking';
-    details.innerHTML = '<summary><span>思考过程</span><span class="thinking-hint">点击展开</span></summary><pre></pre>';
-    messagesEl.appendChild(details);
+    details.innerHTML = '<summary><span>思考过程</span><span class="thinking-hint">点击展开</span></summary><div class="ai-qa-tree-items"></div>';
+    var anchor = parent ? parent.querySelector(':scope > .ai-qa-message-body') || parent.querySelector(':scope > .ai-qa-node-loading[data-loading-for="assistant"]') : null;
+    if (anchor) parent.insertBefore(details, anchor);
+    else target.appendChild(details);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return details;
   }
 
+  function ensureThinkingItems(parent) {
+    var thinking = parent.querySelector(':scope > .ai-qa-thinking');
+    if (!thinking) thinking = addThinkingBlock(parent);
+    return ensureTreeItems(thinking);
+  }
+
+  function toolIdentity(tool) {
+    if (!tool) return '';
+    if (tool.id) return 'id:' + tool.id;
+    if (tool.contentIndex !== undefined) return 'content:' + tool.contentIndex;
+    return '';
+  }
+
+  function findToolCallBlock(container, tool) {
+    if (!container) return null;
+    var identity = toolIdentity(tool);
+    if (!identity) return container.querySelector(':scope > .ai-qa-tool-call:last-of-type');
+    var blocks = container.querySelectorAll(':scope > .ai-qa-tool-call');
+    for (var i = blocks.length - 1; i >= 0; i--) {
+      if (blocks[i].dataset.toolIdentity === identity || (tool.id && blocks[i].dataset.toolContentIndex === String(tool.contentIndex))) return blocks[i];
+      if (tool.id && blocks[i].dataset.toolId === tool.id) return blocks[i];
+      if (tool.contentIndex !== undefined && blocks[i].dataset.toolContentIndex === String(tool.contentIndex)) return blocks[i];
+    }
+    return null;
+  }
+
+  function addToolCallBlock(container, tool) {
+    if (!container) return null;
+    var existing = findToolCallBlock(container, tool);
+    if (existing) return existing;
+    var details = document.createElement('details');
+    details.className = 'ai-qa-tool-call';
+    var identity = toolIdentity(tool);
+    if (identity) details.dataset.toolIdentity = identity;
+    if (tool && tool.id) details.dataset.toolId = tool.id;
+    if (tool && tool.contentIndex !== undefined) details.dataset.toolContentIndex = String(tool.contentIndex);
+    var summary = document.createElement('summary');
+    summary.innerHTML = '<span></span><span class="tools-hint">点击展开</span>';
+    summary.querySelector('span').textContent = toolSummaryText(tool);
+    var pre = document.createElement('pre');
+    details.appendChild(summary);
+    details.appendChild(pre);
+    container.appendChild(details);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return details;
+  }
+
+  function appendToToolBlock(detailsEl, tool, label) {
+    if (!detailsEl || !tool) return;
+    if (tool.id) {
+      detailsEl.dataset.toolId = tool.id;
+      detailsEl.dataset.toolIdentity = 'id:' + tool.id;
+    }
+    if (tool.contentIndex !== undefined) detailsEl.dataset.toolContentIndex = String(tool.contentIndex);
+    var pre = detailsEl.querySelector('pre');
+    var currentState = {};
+    if (detailsEl.dataset.toolState) {
+      try { currentState = JSON.parse(detailsEl.dataset.toolState); }
+      catch (_) { currentState = {}; }
+    }
+    var nextState = mergeToolState(currentState, tool, label);
+    detailsEl.dataset.toolState = JSON.stringify(nextState);
+    pre.textContent = renderToolDisplay(nextState);
+    var labelEl = detailsEl.querySelector('summary > span:first-child');
+    if (labelEl && (tool.name || tool.id)) labelEl.textContent = toolSummaryText(tool);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function finalizeToolBlock(detailsEl) {
+    if (!detailsEl) return;
+    setNodeLoading(detailsEl, 'tool', false);
+    var hint = detailsEl.querySelector('.tools-hint');
+    if (hint) hint.textContent = '默认折叠';
+  }
+
   function appendToThinkingBlock(detailsEl, delta) {
     if (!detailsEl) return;
-    detailsEl.querySelector('pre').textContent += delta;
+    appendTreeText(ensureTreeItems(detailsEl), 'ai-qa-tree-text', delta);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function renderAssistantSegments(msg, segments) {
+    var answerStarted = false;
+    for (var i = 0; i < segments.length; i++) {
+      var segment = segments[i];
+      if (segment.type === 'thinking') {
+        appendTreeText(ensureThinkingItems(msg), 'ai-qa-tree-text', segment.text || '');
+      } else if (segment.type === 'tool') {
+        var parentItems = answerStarted ? null : ensureThinkingItems(msg);
+        var toolBlock = addToolCallBlock(parentItems, segment.tool || {});
+        appendToToolBlock(toolBlock, segment.tool || {}, (segment.tool && segment.tool.status) || 'tool');
+        if (segment.tool && (segment.tool.status === 'done' || segment.tool.status === 'error')) finalizeToolBlock(toolBlock);
+      } else if (segment.type === 'answer') {
+        answerStarted = true;
+      }
+    }
   }
 
   function finalizeThinkingBlock(detailsEl) {
     if (!detailsEl) return;
+    setNodeLoading(detailsEl, 'thinking', false);
     var hint = detailsEl.querySelector('.thinking-hint');
     if (hint) hint.textContent = '默认折叠';
   }
@@ -657,14 +893,198 @@
   function finalizeMessage(msgEl) {
     if (!msgEl) return;
     msgEl.classList.remove('streaming');
-    var raw = msgEl.dataset.rawMarkdown || msgEl.textContent;
-    msgEl.innerHTML = renderMarkdown(raw);
+    setAssistantLoading(msgEl, false);
+    if (!Object.prototype.hasOwnProperty.call(msgEl.dataset, 'rawMarkdown')) return;
+    var raw = msgEl.dataset.rawMarkdown || '';
+    var body = msgEl.querySelector('.ai-qa-message-body');
+    if (!body) {
+      body = document.createElement('div');
+      body.className = 'ai-qa-message-body';
+      msgEl.appendChild(body);
+    }
+    body.innerHTML = renderMarkdown(raw);
     delete msgEl.dataset.rawMarkdown;
+  }
+
+  function activeStreamingAssistant() {
+    return messagesEl ? messagesEl.querySelector('.ai-qa-message.assistant.streaming') : null;
+  }
+
+  function parseSseChunk(buffer, chunk, onEvent) {
+    buffer.text += chunk;
+    var lines = buffer.text.split('\n');
+    buffer.text = lines.pop() || '';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (line === '') {
+        if (buffer.eventType) onEvent(buffer.eventType, buffer.data);
+        buffer.eventType = '';
+        buffer.data = '';
+      } else if (line.startsWith('event: ')) {
+        buffer.eventType = line.slice(7).trim();
+      } else if (line.startsWith('data: ')) {
+        buffer.data += (buffer.data ? '\n' : '') + line.slice(6);
+      }
+    }
+  }
+
+  async function readSseResponse(resp, handlers) {
+    var reader = resp.body.getReader();
+    activeReader = reader;
+    var decoder = new TextDecoder();
+    var buffer = { text: '', eventType: '', data: '' };
+    try {
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        parseSseChunk(buffer, decoder.decode(result.value, { stream: true }), handlers.onEvent);
+      }
+      parseSseChunk(buffer, decoder.decode(), handlers.onEvent);
+      if (buffer.text) parseSseChunk(buffer, '\n', handlers.onEvent);
+      if (buffer.eventType) handlers.onEvent(buffer.eventType, buffer.data);
+    } finally {
+      if (activeReader === reader) activeReader = null;
+    }
+  }
+
+  async function resumeConversation(id) {
+    if (!id) return false;
+    var resp;
+    try {
+      resp = await fetch('/api/ai-qa/sessions/' + encodeURIComponent(id) + '/resume');
+    } catch (_) {
+      return false;
+    }
+    if (!resp.ok || !resp.body) return false;
+
+    var thinkingBlock = null;
+    var toolBlock = null;
+    var streamingMsg = null;
+    var sawSnapshot = false;
+    var shouldStream = false;
+
+    try {
+      await readSseResponse(resp, {
+        onEvent: function(eventType, dataStr) {
+          if (eventType === 'session') {
+            try {
+              var sessionData = JSON.parse(dataStr);
+              if (sessionData.id) saveConversationId(sessionData.id);
+            } catch (_) {}
+          } else if (eventType === 'snapshot') {
+            try {
+              var snapshot = JSON.parse(dataStr);
+              var conv = snapshot.session;
+              if (!conv) return;
+              sawSnapshot = true;
+              renderHistoryMessages(conv.messages);
+              var messages = conv.messages || [];
+              var last = messages[messages.length - 1];
+              shouldStream = !!(last && last.role === 'assistant' && last.status === 'streaming');
+              if (shouldStream) {
+                isStreaming = true;
+                setStreamingControls(true);
+                resumeOffset = Number(last.streamOffset || 0);
+                streamingMsg = activeStreamingAssistant();
+                thinkingBlock = streamingMsg ? streamingMsg.querySelector('.ai-qa-thinking') : messagesEl.querySelector('.ai-qa-thinking');
+                toolBlock = streamingMsg ? streamingMsg.querySelector('.ai-qa-tool-call:last-of-type') : messagesEl.querySelector('.ai-qa-tool-call:last-of-type');
+              }
+            } catch (_) {}
+          } else if (eventType === 'thinking_delta') {
+            try {
+              var thinkingData = JSON.parse(dataStr);
+              resumeOffset = Math.max(resumeOffset, (thinkingData.index || 0) + 1);
+              if (!streamingMsg) streamingMsg = addStreamingMessage();
+              setAssistantLoading(streamingMsg, false);
+              if (!thinkingBlock) thinkingBlock = addThinkingBlock(streamingMsg);
+              setNodeLoading(thinkingBlock, 'thinking', true);
+              toolBlock = null;
+              appendToThinkingBlock(thinkingBlock, thinkingData.delta);
+            } catch (_) {}
+          } else if (eventType === 'tool_execution_start' || eventType === 'tool_execution_end' || eventType === 'tool_call_start' || eventType === 'tool_call_delta' || eventType === 'tool_call_end') {
+            try {
+              var toolData = JSON.parse(dataStr);
+              if (!streamingMsg) streamingMsg = addStreamingMessage();
+              setAssistantLoading(streamingMsg, false);
+              toolBlock = addToolCallBlock(ensureThinkingItems(streamingMsg), toolData.tool);
+              setNodeLoading(toolBlock, 'tool', eventType !== 'tool_execution_end');
+              appendToToolBlock(toolBlock, toolData.tool, eventType.replace(/^tool_/, ''));
+            } catch (_) {}
+          } else if (eventType === 'text_delta') {
+            try {
+              var data = JSON.parse(dataStr);
+              resumeOffset = Math.max(resumeOffset, (data.index || 0) + 1);
+              if (!streamingMsg) streamingMsg = addStreamingMessage();
+              setAssistantLoading(streamingMsg, false);
+              if (thinkingBlock) setNodeLoading(thinkingBlock, 'thinking', false);
+              if (toolBlock) setNodeLoading(toolBlock, 'tool', false);
+              appendToMessage(streamingMsg, data.delta);
+            } catch (_) {}
+          } else if (eventType === 'stopped') {
+            if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
+            if (toolBlock) finalizeToolBlock(toolBlock);
+            if (streamingMsg) finalizeMessage(streamingMsg);
+          } else if (eventType === 'done') {
+            if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
+            if (toolBlock) finalizeToolBlock(toolBlock);
+            if (streamingMsg) finalizeMessage(streamingMsg);
+          } else if (eventType === 'error') {
+            try {
+              var errData = JSON.parse(dataStr);
+              addMessage('error', '错误: ' + (errData.error || '未知错误'));
+            } catch (_) {
+              addMessage('error', '请求出错');
+            }
+          }
+        },
+      });
+      await refreshSessionBar();
+      return sawSnapshot;
+    } finally {
+      if (shouldStream) {
+        isStreaming = false;
+        setStreamingControls(false);
+      }
+    }
   }
 
   function renderMarkdown(text) {
     if (markdownRenderer) return markdownRenderer(text);
     return escapeHtml(text).replace(/\n/g, '<br>');
+  }
+
+  function renderInlineMarkdown(text) {
+    if (inlineMarkdownRenderer) return inlineMarkdownRenderer(text);
+    return escapeHtml(text);
+  }
+
+  function setStreamingControls(active) {
+    if (sendBtn) {
+      sendBtn.disabled = active;
+      sendBtn.hidden = active;
+    }
+    if (stopBtn) stopBtn.hidden = !active;
+    if (textarea) textarea.disabled = active;
+  }
+
+  async function stopGeneration() {
+    if (!isStreaming || stopRequested) return;
+    stopRequested = true;
+    if (stopBtn) stopBtn.disabled = true;
+    try {
+      if (conversationId) {
+        await fetch('/api/ai-qa/sessions/' + encodeURIComponent(conversationId) + '/stop', { method: 'POST' }).catch(function() {});
+      }
+      if (activeReader) await activeReader.cancel().catch(function() {});
+      var streamingMsg = activeStreamingAssistant();
+      if (streamingMsg) finalizeMessage(streamingMsg);
+    } finally {
+      isStreaming = false;
+      stopRequested = false;
+      if (stopBtn) stopBtn.disabled = false;
+      setStreamingControls(false);
+      if (textarea) textarea.focus();
+    }
   }
 
   // === Send message ===
@@ -674,8 +1094,8 @@
     if (!question) return;
 
     isStreaming = true;
-    sendBtn.disabled = true;
-    textarea.disabled = true;
+    stopRequested = false;
+    setStreamingControls(true);
 
     var contextForRequest = snapshotContext();
     if (pendingAnnotationId) {
@@ -688,11 +1108,7 @@
     textarea.value = '';
     textarea.style.height = 'auto';
 
-    var loadingEl = document.createElement('div');
-    loadingEl.className = 'ai-qa-loading';
-    loadingEl.innerHTML = '<span></span><span></span><span></span>';
-    messagesEl.appendChild(loadingEl);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    var loadingEl = addStreamingMessage();
 
     try {
       await ensureConversation();
@@ -712,65 +1128,65 @@
         throw new Error(errText || '请求失败');
       }
 
-      if (loadingEl.parentNode) loadingEl.remove();
-
-      var reader = resp.body.getReader();
-      var decoder = new TextDecoder();
-      var buffer = '';
       var thinkingBlock = null;
-      var streamingMsg = null;
-      var currentEventType = '';
-      var currentData = '';
+      var toolBlock = null;
+      var streamingMsg = loadingEl;
 
-      function handleSseEvent(eventType, dataStr) {
-        if (eventType === 'thinking_delta') {
-          try {
-            var thinkingData = JSON.parse(dataStr);
-            if (!thinkingBlock) thinkingBlock = addThinkingBlock();
-            appendToThinkingBlock(thinkingBlock, thinkingData.delta);
-          } catch (_) {}
-        } else if (eventType === 'text_delta') {
-          try {
-            var data = JSON.parse(dataStr);
-            if (!streamingMsg) streamingMsg = addStreamingMessage();
-            appendToMessage(streamingMsg, data.delta);
-          } catch (_) {}
-        } else if (eventType === 'error') {
-          try {
-            var errData = JSON.parse(dataStr);
-            var errorMessage = errData.error || '未知错误';
-            if (/不存在|过期|not found|expired/i.test(errorMessage)) forgetConversationId();
-            addMessage('error', '错误: ' + errorMessage);
-          } catch (_) {
-            addMessage('error', '请求出错');
+      await readSseResponse(resp, {
+        onEvent: function(eventType, dataStr) {
+          if (eventType === 'session') {
+            try {
+              var sessionData = JSON.parse(dataStr);
+              if (sessionData.id) saveConversationId(sessionData.id);
+            } catch (_) {}
+          } else if (eventType === 'thinking_delta') {
+            try {
+              var thinkingData = JSON.parse(dataStr);
+              if (!streamingMsg) streamingMsg = addStreamingMessage();
+              setAssistantLoading(streamingMsg, false);
+              if (!thinkingBlock) thinkingBlock = addThinkingBlock(streamingMsg);
+              setNodeLoading(thinkingBlock, 'thinking', true);
+              toolBlock = null;
+              appendToThinkingBlock(thinkingBlock, thinkingData.delta);
+            } catch (_) {}
+          } else if (eventType === 'tool_execution_start' || eventType === 'tool_execution_end' || eventType === 'tool_call_start' || eventType === 'tool_call_delta' || eventType === 'tool_call_end') {
+            try {
+              var toolData = JSON.parse(dataStr);
+              if (!streamingMsg) streamingMsg = addStreamingMessage();
+              setAssistantLoading(streamingMsg, false);
+              toolBlock = addToolCallBlock(ensureThinkingItems(streamingMsg), toolData.tool);
+              setNodeLoading(toolBlock, 'tool', eventType !== 'tool_execution_end');
+              appendToToolBlock(toolBlock, toolData.tool, eventType.replace(/^tool_/, ''));
+            } catch (_) {}
+          } else if (eventType === 'text_delta') {
+            try {
+              var data = JSON.parse(dataStr);
+              if (!streamingMsg) streamingMsg = addStreamingMessage();
+              setAssistantLoading(streamingMsg, false);
+              if (thinkingBlock) setNodeLoading(thinkingBlock, 'thinking', false);
+              if (toolBlock) setNodeLoading(toolBlock, 'tool', false);
+              appendToMessage(streamingMsg, data.delta);
+            } catch (_) {}
+          } else if (eventType === 'error') {
+            try {
+              var errData = JSON.parse(dataStr);
+              var errorMessage = errData.error || '未知错误';
+              if (/不存在|过期|not found|expired/i.test(errorMessage)) forgetConversationId();
+              addMessage('error', '错误: ' + errorMessage);
+            } catch (_) {
+              addMessage('error', '请求出错');
+            }
+          } else if (eventType === 'stopped') {
+            if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
+            if (toolBlock) finalizeToolBlock(toolBlock);
+            if (streamingMsg) finalizeMessage(streamingMsg);
+          } else if (eventType === 'done') {
+            if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
+            if (toolBlock) finalizeToolBlock(toolBlock);
+            if (streamingMsg) finalizeMessage(streamingMsg);
           }
-        } else if (eventType === 'done') {
-          if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
-          if (streamingMsg) finalizeMessage(streamingMsg);
-        }
-      }
-
-      while (true) {
-        var result = await reader.read();
-        if (result.done) break;
-
-        buffer += decoder.decode(result.value, { stream: true });
-        var lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i];
-          if (line === '') {
-            if (currentEventType) handleSseEvent(currentEventType, currentData);
-            currentEventType = '';
-            currentData = '';
-          } else if (line.startsWith('event: ')) {
-            currentEventType = line.slice(7).trim();
-          } else if (line.startsWith('data: ')) {
-            currentData += (currentData ? '\n' : '') + line.slice(6);
-          }
-        }
-      }
+        },
+      });
 
       if (thinkingBlock) finalizeThinkingBlock(thinkingBlock);
       if (streamingMsg) finalizeMessage(streamingMsg);
@@ -782,8 +1198,8 @@
       addMessage('error', '请求失败: ' + e.message);
     } finally {
       isStreaming = false;
-      sendBtn.disabled = false;
-      textarea.disabled = false;
+      stopRequested = false;
+      setStreamingControls(false);
       textarea.focus();
     }
   }
@@ -797,6 +1213,7 @@
       if (options.escapeHtml) escapeHtml = options.escapeHtml;
       else if (!escapeHtml) throw new Error('ai-qa requires escapeHtml');
       markdownRenderer = options.renderMarkdown ? options.renderMarkdown : null;
+      inlineMarkdownRenderer = options.renderInlineMarkdown ? options.renderInlineMarkdown : null;
       sourceLocator = options && options.locateSource ? options.locateSource : null;
       annotateSource = options && options.annotateSource ? options.annotateSource : null;
       clearSourceAnnotation = options && options.clearSourceAnnotation ? options.clearSourceAnnotation : null;

@@ -21,13 +21,13 @@ data/comments/<章节文件名>.json
     {
       "id": "a1b2c3d4",
       "author": "张三",
-      "sectionHeading": "3.2 文档 CRUD",
+      "sectionHeading": "3.2 章节导航",
       "sectionLevel": 2,
-      "selectedText": "ElasticSearch 使用倒排索引来加速全文搜索",
+      "selectedText": "文档服务器会根据 Markdown 文件生成章节导航",
       "textHash": "e4f5a6b7",
-      "contextBefore": "在核心概念中我们提到，",
-      "contextAfter": "，这是其高性能的关键",
-      "comment": "这里可以补充倒排索引的具体数据结构示意图",
+      "contextBefore": "在内容组织中我们提到，",
+      "contextAfter": "，方便读者按章节浏览长文档",
+      "comment": "这里可以补充章节排序规则和 README 首页行为说明",
       "createdAt": "2026-06-05T10:30:00.000Z",
       "resolved": false
     }
@@ -59,7 +59,7 @@ data/comments/<章节文件名>.json
 2. **`selectedText`** — 在章节范围内搜索选中文本
 3. **`contextBefore` + `contextAfter`** — 用前后文验证匹配正确性
 
-示例：评论 `#a1b2c3d4` 指向 `03-使用指南.md` 中 "3.2 文档 CRUD" 章节下的 "ElasticSearch 使用倒排索引来加速全文搜索" 这段文本。
+示例：评论 `#a1b2c3d4` 指向 `03-使用指南.md` 中 "3.2 章节导航" 章节下的 "文档服务器会根据 Markdown 文件生成章节导航" 这段文本。
 
 ## 与 Agent 交互
 

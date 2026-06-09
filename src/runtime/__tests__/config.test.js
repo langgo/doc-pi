@@ -56,6 +56,7 @@ describe('resolveRuntimeConfig', () => {
     expect(config.comments.dataDir).toBe(path.join(docsDir, 'custom', 'comments'));
     expect(config.aiQa.agentDir).toBe(path.join(docsDir, 'agents', 'main'));
     expect(config.aiQa.historyDir).toBe(path.join(docsDir, 'histories', 'main'));
+    expect(config.aiQa.persistThinking).toBe(true);
   });
 
   it('lets CLI flags override config object values', async () => {

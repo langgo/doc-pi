@@ -1,35 +1,11 @@
-// AI QA History Store — JSON file persistence for conversations.
+// AI QA History Store — per-conversation JSON metadata persistence.
 //
-// Stores conversation metadata and messages to disk so they survive
-// server restarts and page refreshes.
+// OMP SDK session files are the primary durable transcript store. This module
+// keeps doc-pi UI metadata, selected-source context, and streaming resume state.
 //
-// File: data/ai-qa/sessions.json
-//
-// Schema:
-// {
-//   version: 1,
-//   sessions: [
-//     {
-//       id: string,
-//       title: string,
-//       createdAt: ISO string,
-//       updatedAt: ISO string,
-//       lastChapterFile: string | null,
-//       messages: [
-//         {
-//           id: string,
-//           role: 'user' | 'assistant',
-//           content: string,
-//           context: object | null,   // user messages only
-//           createdAt: ISO string,
-//           thinking: string | null   // assistant only, only when persistThinking=true
-//         }
-//       ]
-//     }
-//   ]
-// }
+// Files: data/ai-qa/sessions/<conversation-or-omp-session-id>.json
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, readdir, unlink, rename } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import { getRuntimeConfig } from '../../../core/server/runtime-state.js';
@@ -38,39 +14,51 @@ function dataDir() {
   return getRuntimeConfig().aiQa.historyDir;
 }
 
-function sessionsFile() {
-  return path.join(dataDir(), 'sessions.json');
+function sessionsDir() {
+  return path.join(dataDir(), 'sessions');
+}
+
+function safeFileName(id) {
+  return String(id || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
+}
+
+function sessionFile(id) {
+  return path.join(sessionsDir(), `${safeFileName(id)}.json`);
 }
 
 async function ensureDir() {
-  const dir = dataDir();
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
+  const dir = sessionsDir();
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
 }
 
-async function readStore() {
-  await ensureDir();
-  if (!existsSync(sessionsFile())) {
-    return { version: 1, sessions: [] };
-  }
+async function readConversationFile(file) {
   try {
-    const raw = await readFile(sessionsFile(), 'utf-8');
+    const raw = await readFile(file, 'utf-8');
     const data = JSON.parse(raw);
-    return data && data.version === 1 ? data : { version: 1, sessions: [] };
+    if (!data || data.version !== 1 || !data.id) return null;
+    if (!Array.isArray(data.messages)) data.messages = [];
+    return data;
   } catch {
-    return { version: 1, sessions: [] };
+    return null;
   }
 }
 
-async function writeStore(data) {
+async function writeConversation(conv) {
   await ensureDir();
-  // Atomic write: write to temp file then rename
-  const file = sessionsFile();
-  const tmp = file + '.tmp';
-  await writeFile(tmp, JSON.stringify(data, null, 2), 'utf-8');
-  const { rename } = await import('fs/promises');
+  const file = sessionFile(conv.id);
+  const tmp = `${file}.tmp`;
+  await writeFile(tmp, JSON.stringify({ version: 1, ...conv }, null, 2), 'utf-8');
   await rename(tmp, file);
+}
+
+async function listConversationFiles() {
+  await ensureDir();
+  try {
+    const names = await readdir(sessionsDir());
+    return names.filter(name => name.endsWith('.json')).map(name => path.join(sessionsDir(), name));
+  } catch {
+    return [];
+  }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────
@@ -80,26 +68,33 @@ async function writeStore(data) {
  * @returns {Promise<Array<{ id, title, createdAt, updatedAt, lastChapterFile, messageCount }>>}
  */
 export async function listConversations() {
-  const store = await readStore();
-  return store.sessions.map(s => ({
-    id: s.id,
-    title: s.title,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt,
-    lastChapterFile: s.lastChapterFile || null,
-    messageCount: s.messages.length,
-  }));
+  const files = await listConversationFiles();
+  const conversations = [];
+  for (const file of files) {
+    const conv = await readConversationFile(file);
+    if (!conv) continue;
+    conversations.push({
+      id: conv.id,
+      title: conv.title,
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+      lastChapterFile: conv.lastChapterFile || null,
+      ompSessionId: conv.ompSessionId || null,
+      ompSessionFile: conv.ompSessionFile || null,
+      messageCount: conv.messages.length,
+    });
+  }
+  return conversations.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
 /**
- * Get a single conversation with all messages.
+ * Get a single conversation with all doc-pi metadata messages.
  * @param {string} id
  * @returns {Promise<object|null>}
  */
 export async function getConversation(id) {
-  const store = await readStore();
-  const conv = store.sessions.find(s => s.id === id);
-  return conv || null;
+  await ensureDir();
+  return readConversationFile(sessionFile(id));
 }
 
 /**
@@ -108,7 +103,6 @@ export async function getConversation(id) {
  * @returns {Promise<object>} the created conversation
  */
 export async function createConversation({ title } = {}) {
-  const store = await readStore();
   const now = new Date().toISOString();
   const conv = {
     id: crypto.randomUUID(),
@@ -116,41 +110,50 @@ export async function createConversation({ title } = {}) {
     createdAt: now,
     updatedAt: now,
     lastChapterFile: null,
+    ompSessionId: null,
+    ompSessionFile: null,
     messages: [],
   };
-  store.sessions.push(conv);
-  await writeStore(store);
+  await writeConversation(conv);
   return conv;
 }
 
 /**
- * Update conversation metadata (title, lastChapterFile).
+ * Update conversation metadata. When ompSessionId is first assigned, metadata
+ * file and public conversation id are aligned to that OMP session id.
  * @param {string} id
- * @param {{ title?: string, lastChapterFile?: string }} updates
+ * @param {{ title?: string, lastChapterFile?: string, ompSessionId?: string, ompSessionFile?: string }} updates
  * @returns {Promise<object|null>} updated conversation or null
  */
 export async function updateConversation(id, updates) {
-  const store = await readStore();
-  const conv = store.sessions.find(s => s.id === id);
+  const conv = await getConversation(id);
   if (!conv) return null;
 
+  const oldId = conv.id;
   if (updates.title !== undefined) conv.title = updates.title;
   if (updates.lastChapterFile !== undefined) conv.lastChapterFile = updates.lastChapterFile;
+  if (updates.ompSessionId !== undefined) {
+    conv.ompSessionId = updates.ompSessionId;
+    conv.id = updates.ompSessionId || conv.id;
+  }
+  if (updates.ompSessionFile !== undefined) conv.ompSessionFile = updates.ompSessionFile;
   conv.updatedAt = new Date().toISOString();
 
-  await writeStore(store);
+  await writeConversation(conv);
+  if (conv.id !== oldId) {
+    try { await unlink(sessionFile(oldId)); } catch {}
+  }
   return conv;
 }
 
 /**
- * Append a message to a conversation.
+ * Append a doc-pi metadata message to a conversation.
  * @param {string} conversationId
- * @param {{ role: 'user'|'assistant', content: string, context?: object, thinking?: string }} msg
+ * @param {{ role: 'user'|'assistant', content: string, context?: object, thinking?: string, status?: string, streamOffset?: number, tools?: Array<object>, segments?: Array<object> }} msg
  * @returns {Promise<object|null>} the added message or null
  */
 export async function appendMessage(conversationId, msg) {
-  const store = await readStore();
-  const conv = store.sessions.find(s => s.id === conversationId);
+  const conv = await getConversation(conversationId);
   if (!conv) return null;
 
   const message = {
@@ -160,28 +163,56 @@ export async function appendMessage(conversationId, msg) {
     context: msg.role === 'user' ? (msg.context || null) : undefined,
     createdAt: new Date().toISOString(),
     thinking: msg.role === 'assistant' ? (msg.thinking || null) : undefined,
+    status: msg.role === 'assistant' ? (msg.status || 'done') : undefined,
+    streamOffset: msg.role === 'assistant' ? (msg.streamOffset || 0) : undefined,
+    tools: msg.role === 'assistant' ? (msg.tools || []) : undefined,
+    segments: msg.role === 'assistant' ? (msg.segments || []) : undefined,
   };
-
   conv.messages.push(message);
   conv.updatedAt = new Date().toISOString();
 
-  await writeStore(store);
+  await writeConversation(conv);
   return message;
 }
 
 /**
- * Delete a conversation.
+ * Update an existing metadata message in a conversation.
+ * @param {string} conversationId
+ * @param {string} messageId
+ * @param {{ content?: string, thinking?: string|null, status?: string, streamOffset?: number, tools?: Array<object>, segments?: Array<object> }} updates
+ * @returns {Promise<object|null>} updated message or null
+ */
+export async function updateMessage(conversationId, messageId, updates) {
+  const conv = await getConversation(conversationId);
+  if (!conv) return null;
+  const message = conv.messages.find(m => m.id === messageId);
+  if (!message) return null;
+
+  if (updates.content !== undefined) message.content = updates.content;
+  if (updates.thinking !== undefined && message.role === 'assistant') message.thinking = updates.thinking;
+  if (updates.status !== undefined && message.role === 'assistant') message.status = updates.status;
+  if (updates.streamOffset !== undefined && message.role === 'assistant') message.streamOffset = updates.streamOffset;
+  if (updates.tools !== undefined && message.role === 'assistant') message.tools = updates.tools;
+  if (updates.segments !== undefined && message.role === 'assistant') message.segments = updates.segments;
+  conv.updatedAt = new Date().toISOString();
+
+  await writeConversation(conv);
+  return message;
+}
+
+/**
+ * Delete a conversation metadata file.
  * @param {string} id
  * @returns {Promise<boolean>} true if deleted, false if not found
  */
 export async function deleteConversation(id) {
-  const store = await readStore();
-  const idx = store.sessions.findIndex(s => s.id === id);
-  if (idx === -1) return false;
-
-  store.sessions.splice(idx, 1);
-  await writeStore(store);
-  return true;
+  await ensureDir();
+  try {
+    await unlink(sessionFile(id));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -189,6 +220,7 @@ export async function deleteConversation(id) {
  * Truncates to 40 chars max.
  */
 export function generateTitle(question) {
-  const cleaned = question.replace(/\s+/g, ' ').trim();
-  return cleaned.length > 40 ? cleaned.slice(0, 40) + '...' : cleaned;
+  if (!question) return '新对话';
+  const title = question.trim().replace(/\s+/g, ' ');
+  return title.length > 40 ? title.slice(0, 37) + '...' : title;
 }

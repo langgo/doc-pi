@@ -6,10 +6,16 @@
 // PATCH  /api/ai-qa/sessions/:id   — update conversation (title)
 // DELETE /api/ai-qa/sessions/:id   — delete conversation + dispose runtime session
 // POST   /api/ai-qa/chat           — SSE stream, body: { conversationId, question, context }
+// GET    /api/ai-qa/sessions/:id/resume — snapshot + active SSE stream
+// GET    /api/ai-qa/sessions/:id/stream — resume active SSE stream
 // GET    /api/ai-qa/status         — availability + runtime session count
 
 import {
   askQuestion,
+  subscribeToQuestion,
+  waitForQuestion,
+  markActiveStreamPersisted,
+  stopQuestion,
   disposeRuntimeSession,
   getRuntimeSessionCount,
   isSdkAvailable,
@@ -25,6 +31,13 @@ function sseHeaders() {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   };
+}
+
+function eventPayload(event) {
+  if (event.type === 'text_delta' || event.type === 'thinking_delta') return { delta: event.delta, index: event.index };
+  if (event.type === 'tool_call_start' || event.type === 'tool_call_delta' || event.type === 'tool_call_end' ||
+      event.type === 'tool_execution_start' || event.type === 'tool_execution_end') return { tool: event.tool, index: event.index };
+  return { index: event.index };
 }
 
 function sseWrite(res, event, data) {
@@ -125,6 +138,29 @@ export const apiRoutes = [
     },
   },
 
+  // ── POST /api/ai-qa/sessions/:id/stop — stop active answer ────────────
+  {
+    method: 'POST',
+    path: '/api/ai-qa/sessions/:id/stop',
+    async handler(req, res, params) {
+      try {
+        const stopped = await stopQuestion(params.id);
+        const conv = await historyStore.getConversation(params.id);
+        const messages = conv?.messages || [];
+        const last = messages[messages.length - 1];
+        if (last && last.role === 'assistant' && last.status === 'streaming') {
+          await historyStore.updateMessage(params.id, last.id, {
+            status: 'stopped',
+            streamOffset: (last.streamOffset || 0) + 1,
+          });
+        }
+        json(res, 200, { stopped });
+      } catch (err) {
+        json(res, 500, { error: err.message });
+      }
+    },
+  },
+
   // ── DELETE /api/ai-qa/sessions/:id — delete conversation ──────────────
   {
     method: 'DELETE',
@@ -164,7 +200,8 @@ export const apiRoutes = [
         return;
       }
 
-      const { conversationId, question, context = {} } = body;
+      let { conversationId } = body;
+      const { question, context = {} } = body;
 
       // Validate context fields
       const ctx = {
@@ -174,6 +211,8 @@ export const apiRoutes = [
         chapterFile: context.chapterFile || '',
         question,
       };
+
+      let assistantMessageId = null;
 
       // Persist user message before LLM call
       try {
@@ -202,6 +241,16 @@ export const apiRoutes = [
             lastChapterFile: ctx.chapterFile,
           });
         }
+
+        const assistantMessage = await historyStore.appendMessage(conversationId, {
+          role: 'assistant',
+          content: '',
+          thinking: '',
+          status: 'streaming',
+          streamOffset: 0,
+          segments: [],
+        });
+        assistantMessageId = assistantMessage?.id || null;
       } catch (err) {
         json(res, 500, { error: `Failed to persist message: ${err.message}` });
         return;
@@ -214,34 +263,197 @@ export const apiRoutes = [
         sseWrite(res, 'heartbeat', '');
       }, 15000);
 
-      let accumulatedText = '';
-      let accumulatedThinking = '';
-
       try {
         const stream = await askQuestion(conversationId, ctx);
+        if (stream.conversationId && stream.conversationId !== conversationId) {
+          const oldConversationId = conversationId;
+          conversationId = stream.conversationId;
+          const moved = await historyStore.getConversation(conversationId);
+          const assistant = moved?.messages?.find(message => message.id === assistantMessageId);
+          if (!assistant && assistantMessageId) {
+            await historyStore.appendMessage(conversationId, {
+              role: 'assistant',
+              content: '',
+              thinking: '',
+              status: 'streaming',
+              streamOffset: 0,
+              segments: [],
+            });
+          }
+          sseWrite(res, 'session', { id: conversationId, previousId: oldConversationId });
+        }
+        let accumulatedText = '';
+        let accumulatedThinking = '';
+        let accumulatedTools = [];
+        let accumulatedSegments = [];
 
         for await (const event of stream) {
-          sseWrite(res, event.type, { delta: event.delta });
-
-          // Accumulate for persistence
+          if (event.type === 'stopped') {
+            if (assistantMessageId) {
+              await historyStore.updateMessage(conversationId, assistantMessageId, {
+                status: 'stopped',
+                streamOffset: (event.index || 0) + 1,
+              });
+            }
+            sseWrite(res, 'stopped', { index: event.index });
+            break;
+          }
+          if (event.type === 'done') {
+            if (assistantMessageId) {
+              await historyStore.updateMessage(conversationId, assistantMessageId, {
+                status: 'done',
+                streamOffset: (event.index || 0) + 1,
+              });
+            }
+            sseWrite(res, 'done', { index: event.index });
+            break;
+          }
+          if (event.type === 'error') {
+            if (assistantMessageId) {
+              await historyStore.updateMessage(conversationId, assistantMessageId, {
+                status: 'error',
+                streamOffset: (event.index || 0) + 1,
+              });
+            }
+            sseWrite(res, 'error', { error: event.error || '未知错误', index: event.index });
+            break;
+          }
           if (event.type === 'text_delta') {
             accumulatedText += event.delta;
+            accumulatedSegments = accumulatedSegments.concat({ type: 'answer', text: event.delta });
           } else if (event.type === 'thinking_delta') {
             accumulatedThinking += event.delta;
+            accumulatedSegments = accumulatedSegments.concat({ type: 'thinking', text: event.delta });
+          } else if (event.tool) {
+            accumulatedTools = accumulatedTools.concat(event.tool);
+            accumulatedSegments = accumulatedSegments.concat({ type: 'tool', tool: event.tool });
           }
+          if (assistantMessageId) {
+            await historyStore.updateMessage(conversationId, assistantMessageId, {
+              content: accumulatedText,
+              thinking: isPersistThinking() ? accumulatedThinking : null,
+              status: 'streaming',
+              streamOffset: (event.index || 0) + 1,
+              tools: accumulatedTools,
+              segments: accumulatedSegments,
+            });
+          }
+          sseWrite(res, event.type, eventPayload(event));
         }
-
-        // Persist assistant message after stream completes
-        if (accumulatedText) {
+      } catch (err) {
+        sseWrite(res, 'error', { error: err.message });
+      } finally {
+        clearInterval(heartbeat);
+        res.end();
+        const finalConversationId = conversationId;
+        waitForQuestion(finalConversationId).then(async (snapshot) => {
+          if (!snapshot || !assistantMessageId) return;
+          if (!markActiveStreamPersisted(finalConversationId)) return;
+          if (!await historyStore.getConversation(finalConversationId)) return;
           const persistThinkingFlag = isPersistThinking();
-          await historyStore.appendMessage(conversationId, {
-            role: 'assistant',
-            content: accumulatedText,
-            thinking: persistThinkingFlag ? accumulatedThinking : null,
+          await historyStore.updateMessage(finalConversationId, assistantMessageId, {
+            content: snapshot.text || '',
+            thinking: persistThinkingFlag ? snapshot.thinking : null,
+            status: snapshot.status === 'done' ? 'done' : snapshot.status === 'stopped' ? 'stopped' : 'error',
+            streamOffset: snapshot.eventCount,
+            tools: snapshot.tools || [],
+            segments: snapshot.segments || [],
           });
-        }
+        }).catch(() => {});
+      }
+    },
+  },
 
-        sseWrite(res, 'done', {});
+  // ── GET /api/ai-qa/sessions/:id/resume — snapshot + active stream ────
+  {
+    method: 'GET',
+    path: '/api/ai-qa/sessions/:id/resume',
+    async handler(req, res, params) {
+      const conv = await historyStore.getConversation(params.id);
+      if (!conv) {
+        json(res, 404, { error: 'Conversation not found' });
+        return;
+      }
+
+      res.writeHead(200, sseHeaders());
+      sseWrite(res, 'snapshot', { session: conv });
+
+      const messages = conv.messages || [];
+      const last = messages[messages.length - 1];
+      if (!last || last.role !== 'assistant' || last.status !== 'streaming') {
+        sseWrite(res, 'done', { index: last?.streamOffset || 0 });
+        res.end();
+        return;
+      }
+
+      const stream = subscribeToQuestion(params.id, last.streamOffset || 0);
+      if (!stream) {
+        sseWrite(res, 'error', { error: 'Active stream not found' });
+        res.end();
+        return;
+      }
+
+      const heartbeat = setInterval(() => {
+        sseWrite(res, 'heartbeat', '');
+      }, 15000);
+
+      try {
+        for await (const event of stream) {
+          if (event.type === 'stopped') {
+            sseWrite(res, 'stopped', { index: event.index });
+            break;
+          }
+          if (event.type === 'done') {
+            sseWrite(res, 'done', { index: event.index });
+            break;
+          }
+          if (event.type === 'error') {
+            sseWrite(res, 'error', { error: event.error || '未知错误', index: event.index });
+            break;
+          }
+          sseWrite(res, event.type, eventPayload(event));
+        }
+      } finally {
+        clearInterval(heartbeat);
+        res.end();
+      }
+    },
+  },
+
+  // ── GET /api/ai-qa/sessions/:id/stream — resume active SSE stream ─────
+  {
+    method: 'GET',
+    path: '/api/ai-qa/sessions/:id/stream',
+    async handler(req, res, params) {
+      const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      const offset = Number(url.searchParams.get('offset') || '0');
+      const stream = subscribeToQuestion(params.id, Number.isFinite(offset) && offset > 0 ? offset : 0);
+      if (!stream) {
+        json(res, 404, { error: 'Active stream not found' });
+        return;
+      }
+
+      res.writeHead(200, sseHeaders());
+      const heartbeat = setInterval(() => {
+        sseWrite(res, 'heartbeat', '');
+      }, 15000);
+
+      try {
+        for await (const event of stream) {
+          if (event.type === 'stopped') {
+            sseWrite(res, 'stopped', { index: event.index });
+            break;
+          }
+          if (event.type === 'done') {
+            sseWrite(res, 'done', { index: event.index });
+            break;
+          }
+          if (event.type === 'error') {
+            sseWrite(res, 'error', { error: event.error || '未知错误', index: event.index });
+            break;
+          }
+          sseWrite(res, event.type, eventPayload(event));
+        }
       } catch (err) {
         sseWrite(res, 'error', { error: err.message });
       } finally {

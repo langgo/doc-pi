@@ -1,0 +1,14 @@
+# AI 问答模型配置（项目独立，不依赖全局 ~/.omp/agent/models.yml）
+providers:
+  coco-proxy:
+    baseUrl: http://127.0.0.1:8686/v1
+    api: openai-completions
+    apiKey: dummy
+    models:
+      - id: DeepSeek-V4-Pro
+        name: DeepSeek-V4-Pro
+        reasoning: true
+        input:
+          - text
+        contextWindow: 240000
+        maxTokens: 32000

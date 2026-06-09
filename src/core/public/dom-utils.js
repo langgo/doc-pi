@@ -13,4 +13,9 @@
     // Fallback: plain text with line breaks
     return core.dom.escapeHtml(text).replace(/\n/g, '<br>');
   };
+
+  core.dom.renderInlineMarkdown = function(text) {
+    if (typeof marked !== 'undefined') return marked.parseInline(text);
+    return core.dom.escapeHtml(text);
+  };
 })();
