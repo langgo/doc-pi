@@ -34,6 +34,7 @@
       currentFile: core.state.currentFile,
       escapeHtml: core.dom.escapeHtml,
       renderMarkdown: core.dom.renderMarkdown,
+      renderInlineMarkdown: core.dom.renderInlineMarkdown,
       locateSource: core.article.locateText,
       annotateSource: core.article.annotateText,
       clearSourceAnnotation: core.article.clearAnnotation,

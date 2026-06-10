@@ -1,12 +1,9 @@
 // AI QA Session Manager — manages omp SDK agent runtime sessions.
 //
 // Architecture:
-//   - "Conversation" = persistent chat history (stored in history-store.js)
-//   - "Runtime session" = active OMP SDK agent session (in-memory Map)
-//
-// Runtime sessions are created on-demand when a user sends a message.
-// If a conversation has history but no active runtime session, the history
-// is replayed into a new SDK session before the new question is sent.
+//   - OMP SDK owns durable conversation transcripts in file-backed sessions.
+//   - history-store.js stores only doc-pi metadata and streaming resume state.
+//   - Runtime sessions are cached in memory for active streaming/reconnects.
 //
 // Features:
 //   - System prompt injection (role + available chapter files)
@@ -23,12 +20,16 @@ import * as historyStore from './history-store.js';
 const MAX_SESSIONS = 5;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-// Map<conversationId, { session, unsubscribe, lastActivity, timer, authStorage }>
+// Map<conversationId, { session, unsubscribe, lastActivity, timer, authStorage, activeStream }>
 const runtimeSessions = new Map();
 
 let sdkAvailable = true;
 let agentDir = null;
-let persistThinking = false;
+let persistThinking = true;
+
+function sessionDir() {
+  return path.join(agentDir, 'sessions');
+}
 let sdkPromise = null;
 
 async function loadSdk() {
@@ -46,7 +47,7 @@ export function resetForTesting() {
   runtimeSessions.clear();
   sdkAvailable = true;
   agentDir = null;
-  persistThinking = false;
+  persistThinking = true;
   sdkPromise = null;
 }
 
@@ -62,18 +63,20 @@ export function configure(options) {
 
 function buildSystemPrompt(chapterFiles) {
   const fileList = chapterFiles.map(f => `- ${f}`).join('\n');
-  return `你是一个 ElasticSearch 技术文档的问答助手。你的知识来源是以下文章文件：
+  return `你是当前文档站点的问答助手。你的主要知识来源是当前内容目录中的 Markdown 文档：
 
 ${fileList}
 
 规则：
-1. 简单问题直接回答，不需要使用工具
-2. 需要查阅文档时，使用 read 工具读取相关章节文件
-3. 需要补充外部知识时，使用 web_search 工具搜索
-4. 回答要引用具体章节和段落
-5. 使用中文回答
-6. 你只能使用 read 和 web_search 两个工具
-7. 不要读取 src/ 目录下的代码文件，只读取根目录的 .md 章节文件`;
+1. 优先基于上方列出的 Markdown 文档回答
+2. 简单问题可直接回答，不必使用工具
+3. 需要查阅文档时，只使用 read 工具读取上方列出的 Markdown 文件
+4. 需要补充外部知识时，可使用 web_search，并明确区分“文档内容”和“外部补充”
+5. 回答应尽量引用具体文档文件、章节标题或原文依据
+6. 默认使用用户提问的语言回答；如果用户使用中文，则使用中文回答
+7. 你只能使用 read 和 web_search 两个工具
+8. 不要读取源码、配置、运行时数据、隐藏文件或非文档文件
+9. 如果文档中没有依据，应明确说明“当前文档未提供相关信息”`;
 }
 
 function buildQuestionPrompt({ selectedText, contextBefore, contextAfter, chapterFile, question }) {
@@ -107,12 +110,11 @@ function resetIdleTimer(conversationId) {
 // ── Runtime session management ──────────────────────────────────────────
 
 /**
- * Create a new OMP SDK runtime session, optionally replaying history.
+ * Create a new OMP SDK runtime session.
  * @param {string} conversationId
- * @param {Array<{role: string, content: string}>} historyMessages - messages to replay
  * @returns {Promise<object>} the SDK session object
  */
-async function createRuntimeSession(conversationId, historyMessages) {
+async function createRuntimeSession(conversationId) {
   if (!sdkAvailable) {
     throw new Error('AI 问答暂不可用');
   }
@@ -127,10 +129,15 @@ async function createRuntimeSession(conversationId, historyMessages) {
   const authStorage = await AuthStorage.create(path.join(agentDir, 'agent.db'));
   const modelRegistry = new ModelRegistry(authStorage, path.join(agentDir, 'models.yml'));
 
+  const conversation = await historyStore.getConversation(conversationId);
+  const manager = conversation?.ompSessionFile
+    ? await SessionManager.open(conversation.ompSessionFile, sessionDir())
+    : SessionManager.create(getContentRoot(), sessionDir());
+
   let agentResult;
   try {
     agentResult = await createAgentSession({
-      sessionManager: SessionManager.inMemory(),
+      sessionManager: manager,
       toolNames: ['read', 'web_search'],
       enableMCP: false,
       enableLsp: false,
@@ -148,22 +155,18 @@ async function createRuntimeSession(conversationId, historyMessages) {
 
   const { session } = agentResult;
 
-  // Send system prompt
+  if (!conversation?.ompSessionFile) {
+    await historyStore.updateConversation(conversationId, {
+      ompSessionId: session.sessionId,
+      ompSessionFile: session.sessionFile,
+    });
+    const entry = await historyStore.getConversation(session.sessionId);
+    if (entry) conversationId = session.sessionId;
+  }
+
+  // Send doc-pi system prompt as transient SDK session context.
   const systemPrompt = buildSystemPrompt(chapterFiles);
   await session.sendCustomMessage({ role: 'system', content: systemPrompt });
-
-  // Replay history messages if any
-  if (historyMessages && historyMessages.length > 0) {
-    for (const msg of historyMessages) {
-      if (msg.role === 'user' || msg.role === 'assistant') {
-        try {
-          await session.sendCustomMessage({ role: msg.role, content: msg.content });
-        } catch {
-          // If replay fails for a message, skip it and continue
-        }
-      }
-    }
-  }
 
   const unsubscribe = session.subscribe(() => {}); // placeholder
 
@@ -177,32 +180,20 @@ async function createRuntimeSession(conversationId, historyMessages) {
 
   resetIdleTimer(conversationId);
 
-  return session;
+  return { session, conversationId };
 }
 
 /**
  * Get or create a runtime session for a conversation.
- * If the conversation has history messages, they are replayed into a new session.
  */
 async function ensureRuntimeSession(conversationId) {
   const existing = runtimeSessions.get(conversationId);
   if (existing) {
     resetIdleTimer(conversationId);
-    return existing.session;
+    return { session: existing.session, conversationId };
   }
 
-  // Load conversation history for replay
-  let historyMessages = [];
-  try {
-    const conv = await historyStore.getConversation(conversationId);
-    if (conv && conv.messages.length > 0) {
-      historyMessages = conv.messages.map(m => ({ role: m.role, content: m.content }));
-    }
-  } catch {
-    // If history load fails, proceed without replay
-  }
-
-  return createRuntimeSession(conversationId, historyMessages);
+  return createRuntimeSession(conversationId);
 }
 
 /**
@@ -211,6 +202,26 @@ async function ensureRuntimeSession(conversationId) {
 export async function disposeAllRuntimeSessions() {
   const ids = [...runtimeSessions.keys()];
   await Promise.all(ids.map(id => disposeRuntimeSession(id)));
+}
+
+export async function stopQuestion(conversationId) {
+  const entry = runtimeSessions.get(conversationId);
+  const stream = entry?.activeStream;
+  if (!entry || !stream || stream.status !== 'streaming') return false;
+
+  stream.status = 'stopped';
+  stream.events.push({ type: 'stopped' });
+  stream.error = null;
+  if (typeof stream.resolveDone === 'function') stream.resolveDone();
+  try {
+    if (typeof entry.session.abort === 'function') await entry.session.abort();
+    else if (entry.session.agent && typeof entry.session.agent.abort === 'function') entry.session.agent.abort();
+  } catch {
+    // Stop should still complete local stream state.
+  }
+  for (const waiter of stream.waiters) waiter();
+  stream.waiters.clear();
+  return true;
 }
 
 export async function disposeRuntimeSession(conversationId) {
@@ -245,7 +256,9 @@ export async function disposeRuntimeSession(conversationId) {
  * @returns {AsyncIterator<{ type: 'text_delta' | 'thinking_delta', delta: string }>}
  */
 export async function askQuestion(conversationId, context) {
-  const session = await ensureRuntimeSession(conversationId);
+  const runtime = await ensureRuntimeSession(conversationId);
+  const session = runtime.session;
+  const runtimeConversationId = runtime.conversationId;
   const questionText = buildQuestionPrompt(context);
 
   // Collect assistant stream events
@@ -267,57 +280,173 @@ export async function askQuestion(conversationId, context) {
     }
   }
 
-  // Re-subscribe for this request
-  const entry = runtimeSessions.get(conversationId);
+  const entry = runtimeSessions.get(runtimeConversationId);
+  if (entry.activeStream?.status === 'streaming') {
+    throw new Error('当前会话已有回答正在生成');
+  }
+
+  const streamState = {
+    events: deltas,
+    status: 'streaming',
+    text: '',
+    thinking: '',
+    tools: [],
+    segments: [],
+    error: null,
+    waiters: new Set(),
+    donePromise,
+    resolveDone,
+    persisted: false,
+  };
+  streamState.conversationId = runtimeConversationId;
+  entry.activeStream = streamState;
+
+  function notifyStream() {
+    notify();
+    for (const waiter of streamState.waiters) waiter();
+    streamState.waiters.clear();
+  }
+
   if (entry.unsubscribe) entry.unsubscribe();
   const unsubscribe = session.subscribe((event) => {
+    if (streamState.status !== 'streaming') return;
     if (event.type === 'message_update') {
       const e = event.assistantMessageEvent;
       if ((e?.type === 'text_delta' || e?.type === 'thinking_delta') && e.delta) {
-        deltas.push({ type: e.type, delta: e.delta });
-        notify();
+        streamState.events.push({ type: e.type, delta: e.delta });
+        if (e.type === 'text_delta') {
+          streamState.text += e.delta;
+          streamState.segments.push({ type: 'answer', text: e.delta });
+        } else {
+          streamState.thinking += e.delta;
+          streamState.segments.push({ type: 'thinking', text: e.delta });
+        }
+        notifyStream();
+      } else if (e?.type === 'toolcall_start') {
+        const tool = { contentIndex: e.contentIndex, status: 'call_start' };
+        streamState.tools.push(tool);
+        streamState.segments.push({ type: 'tool', tool });
+        streamState.events.push({ type: 'tool_call_start', tool });
+        notifyStream();
+      } else if (e?.type === 'toolcall_delta') {
+        const tool = { contentIndex: e.contentIndex, delta: e.delta || '', status: 'call_delta' };
+        streamState.tools.push(tool);
+        streamState.segments.push({ type: 'tool', tool });
+        streamState.events.push({ type: 'tool_call_delta', tool });
+        notifyStream();
+      } else if (e?.type === 'toolcall_end') {
+        const tool = {
+          contentIndex: e.contentIndex,
+          id: e.toolCall?.id,
+          name: e.toolCall?.name,
+          arguments: e.toolCall?.arguments,
+          status: 'call_end',
+        };
+        streamState.tools.push(tool);
+        streamState.segments.push({ type: 'tool', tool });
+        streamState.events.push({ type: 'tool_call_end', tool });
+        notifyStream();
       }
     }
+    if (event.type === 'tool_execution_start') {
+      const tool = { id: event.toolCallId, name: event.toolName, args: event.args, status: 'started' };
+      streamState.tools.push(tool);
+      streamState.segments.push({ type: 'tool', tool });
+      streamState.events.push({ type: 'tool_execution_start', tool });
+      notifyStream();
+    }
+    if (event.type === 'tool_execution_end') {
+      const tool = { id: event.toolCallId, name: event.toolName, result: event.result, isError: !!event.isError, status: event.isError ? 'error' : 'done' };
+      streamState.tools.push(tool);
+      streamState.segments.push({ type: 'tool', tool });
+      streamState.events.push({ type: 'tool_execution_end', tool });
+      notifyStream();
+    }
     if (event.type === 'agent_end') {
+      streamState.status = 'done';
+      streamState.events.push({ type: 'done' });
       resolveDone();
-      notify();
+      notifyStream();
     }
   });
   entry.unsubscribe = unsubscribe;
 
-  // prompt() both sends the message and triggers the agent
   session.prompt(questionText).catch((err) => {
-    rejectDone(err);
-    notify();
+    streamState.status = 'error';
+    streamState.error = err.message;
+    streamState.events.push({ type: 'error', error: err.message });
+    resolveDone();
+    notifyStream();
   });
 
-  // Return iterator immediately — consumer pulls deltas as they arrive
-  let index = 0;
+  const iterable = subscribeToStreamState(streamState, 0);
+  iterable.conversationId = runtimeConversationId;
+  return iterable;
+}
+
+function subscribeToStreamState(streamState, offset = 0) {
+  let index = Math.max(0, offset);
   return {
     [Symbol.asyncIterator]() {
       return {
         async next() {
-          if (index < deltas.length) {
-            return { value: deltas[index++], done: false };
+          if (index < streamState.events.length) {
+            const event = streamState.events[index];
+            return { value: { ...event, index: index++ }, done: false };
           }
-
-          const isDone = await Promise.race([
-            donePromise.then(() => true),
-            new Promise(r => { wakeNext = r; }),
-          ]);
-
-          if (isDone && index >= deltas.length) {
-            return { done: true };
+          if (streamState.status !== 'streaming') return { done: true };
+          await new Promise(resolve => streamState.waiters.add(resolve));
+          if (index < streamState.events.length) {
+            const event = streamState.events[index];
+            return { value: { ...event, index: index++ }, done: false };
           }
-
-          if (index < deltas.length) {
-            return { value: deltas[index++], done: false };
-          }
+          return { done: true };
+        },
+        async return() {
           return { done: true };
         },
       };
     },
   };
+}
+
+export function getActiveStream(conversationId) {
+  const stream = runtimeSessions.get(conversationId)?.activeStream;
+  if (!stream) return null;
+  return {
+    status: stream.status,
+    eventCount: stream.events.length,
+    text: stream.text,
+    thinking: stream.thinking,
+    tools: stream.tools.slice(),
+    segments: stream.segments.slice(),
+    error: stream.error,
+  };
+}
+
+export function subscribeToQuestion(conversationId, offset = 0) {
+  const entry = runtimeSessions.get(conversationId);
+  if (!entry?.activeStream) return null;
+  resetIdleTimer(conversationId);
+  return subscribeToStreamState(entry.activeStream, offset);
+}
+
+export async function waitForQuestion(conversationId) {
+  const stream = runtimeSessions.get(conversationId)?.activeStream;
+  if (!stream) return null;
+  try {
+    await stream.donePromise;
+  } catch {
+    // Snapshot below carries error status.
+  }
+  return getActiveStream(conversationId);
+}
+
+export function markActiveStreamPersisted(conversationId) {
+  const stream = runtimeSessions.get(conversationId)?.activeStream;
+  if (!stream || stream.persisted) return false;
+  stream.persisted = true;
+  return true;
 }
 
 /**

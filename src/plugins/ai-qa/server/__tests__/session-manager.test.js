@@ -18,6 +18,7 @@ function defaultFactory() {
       subscriber = fn;
       return () => { subscriber = null; };
     }),
+    abort: mock(async () => {}),
     dispose: mock(async () => {}),
     _emit: (event) => {
       if (subscriber) subscriber(event);
@@ -57,7 +58,9 @@ mock.module('@oh-my-pi/pi-coding-agent', () => {
   mockedSdk = {
     createAgentSession: mock(defaultFactory),
     SessionManager: {
-      inMemory: mock(() => ({})),
+      inMemory: mock(() => ({ kind: 'memory' })),
+      create: mock((cwd, sessionDir) => ({ kind: 'file', cwd, sessionDir })),
+      open: mock(async (sessionFile, sessionDir) => ({ kind: 'open', sessionFile, sessionDir })),
     },
     AuthStorage: MockAuthStorage,
     ModelRegistry: MockModelRegistry,
@@ -68,6 +71,10 @@ mock.module('@oh-my-pi/pi-coding-agent', () => {
 const sessionManager = await import('../session-manager.js');
 const {
   askQuestion,
+  subscribeToQuestion,
+  getActiveStream,
+  waitForQuestion,
+  stopQuestion,
   disposeRuntimeSession,
   getRuntimeSessionCount,
   isSdkAvailable,
@@ -111,6 +118,9 @@ describe('session-manager', () => {
       expect(options.authStorage).toBe(createdAuthStorages[0]);
       expect(options.modelRegistry.authStorage).toBe(createdAuthStorages[0]);
       expect(options.modelRegistry.modelsPath).toBe('/tmp/test-agent/models.yml');
+      expect(mockedSdk.SessionManager.inMemory).not.toHaveBeenCalled();
+      expect(mockedSdk.SessionManager.create).toHaveBeenCalledWith(process.cwd(), '/tmp/test-agent/sessions');
+      expect(options.sessionManager).toEqual({ kind: 'file', cwd: process.cwd(), sessionDir: '/tmp/test-agent/sessions' });
 
       capturedSession._emit({ type: 'agent_end' });
       for await (const _ of stream) { /* drain */ }
@@ -146,9 +156,13 @@ describe('session-manager', () => {
       expect(capturedSession.sendCustomMessage).toHaveBeenCalled();
       const call = capturedSession.sendCustomMessage.mock.calls[0][0];
       expect(call.role).toBe('system');
-      expect(call.content).toContain('ElasticSearch');
+      expect(call.content).toContain('当前文档站点');
+      expect(call.content).not.toContain('ElasticSearch');
       expect(call.content).toContain('read');
       expect(call.content).toContain('web_search');
+      expect(call.content).toContain('Markdown');
+      expect(call.content).toContain('不要读取源码');
+      expect(call.content).toContain('当前文档未提供相关信息');
 
       capturedSession._emit({ type: 'agent_end' });
       for await (const _ of stream) { /* drain */ }
@@ -286,9 +300,137 @@ describe('session-manager', () => {
       }
 
       expect(results).toEqual([
-        { type: 'thinking_delta', delta: '先分析' },
-        { type: 'text_delta', delta: '最终答案' },
+        { type: 'thinking_delta', delta: '先分析', index: 0 },
+        { type: 'text_delta', delta: '最终答案', index: 1 },
+        { type: 'done', index: 2 },
       ]);
+    });
+
+    it('streams tool call lifecycle events for frontend rendering', async () => {
+      const streamPromise = askQuestion('conv-tools', {
+        question: '查文档',
+        selectedText: '',
+        contextBefore: '',
+        contextAfter: '',
+        chapterFile: '01-概述.md',
+      });
+
+      await new Promise(r => setTimeout(r, 20));
+
+      capturedSession._emit({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_start', contentIndex: 0 } });
+      capturedSession._emit({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_delta', contentIndex: 0, delta: '{"path":"README.md"}' } });
+      capturedSession._emit({
+        type: 'message_update',
+        assistantMessageEvent: {
+          type: 'toolcall_end',
+          contentIndex: 0,
+          toolCall: { id: 'tool-1', name: 'read', arguments: { path: 'README.md' } },
+        },
+      });
+      capturedSession._emit({ type: 'tool_execution_start', toolCallId: 'tool-1', toolName: 'read', args: { path: 'README.md' } });
+      capturedSession._emit({ type: 'tool_execution_end', toolCallId: 'tool-1', toolName: 'read', result: 'README content' });
+      capturedSession._emit({ type: 'agent_end' });
+
+      const stream = await streamPromise;
+      const results = [];
+      for await (const event of stream) results.push(event);
+
+      expect(results).toEqual([
+        { type: 'tool_call_start', tool: { contentIndex: 0, status: 'call_start' }, index: 0 },
+        { type: 'tool_call_delta', tool: { contentIndex: 0, delta: '{"path":"README.md"}', status: 'call_delta' }, index: 1 },
+        { type: 'tool_call_end', tool: { contentIndex: 0, id: 'tool-1', name: 'read', arguments: { path: 'README.md' }, status: 'call_end' }, index: 2 },
+        { type: 'tool_execution_start', tool: { id: 'tool-1', name: 'read', args: { path: 'README.md' }, status: 'started' }, index: 3 },
+        { type: 'tool_execution_end', tool: { id: 'tool-1', name: 'read', result: 'README content', isError: false, status: 'done' }, index: 4 },
+        { type: 'done', index: 5 },
+      ]);
+    });
+
+    it('stops an active stream and aborts the SDK session', async () => {
+      const stream = await askQuestion('conv-stop', {
+        question: '停止测试',
+        selectedText: '',
+        contextBefore: '',
+        contextAfter: '',
+        chapterFile: '01-概述.md',
+      });
+
+      capturedSession._emit({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'partial' } });
+      expect(getActiveStream('conv-stop')?.status).toBe('streaming');
+
+      const stopped = await stopQuestion('conv-stop');
+      expect(stopped).toBe(true);
+      expect(capturedSession.abort).toHaveBeenCalled();
+      expect(getActiveStream('conv-stop')?.status).toBe('stopped');
+
+      const results = [];
+      for await (const event of stream) results.push(event);
+      expect(results).toEqual([
+        { type: 'text_delta', delta: 'partial', index: 0 },
+        { type: 'stopped', index: 1 },
+      ]);
+    });
+
+    it('ignores late SDK events after stopping a stream', async () => {
+      const stream = await askQuestion('conv-stop-late', {
+        question: '停止后不要追加',
+        selectedText: '',
+        contextBefore: '',
+        contextAfter: '',
+        chapterFile: '01-概述.md',
+      });
+
+      capturedSession._emit({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'partial' } });
+      await stopQuestion('conv-stop-late');
+      capturedSession._emit({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: ' late' } });
+      capturedSession._emit({ type: 'agent_end' });
+
+      expect(getActiveStream('conv-stop-late')).toMatchObject({
+        status: 'stopped',
+        text: 'partial',
+      });
+
+      const results = [];
+      for await (const event of stream) results.push(event);
+      expect(results).toEqual([
+        { type: 'text_delta', delta: 'partial', index: 0 },
+        { type: 'stopped', index: 1 },
+      ]);
+    });
+
+    it('keeps an OMP stream active after the first subscriber stops and replays later deltas to a resumed subscriber', async () => {
+      const stream = await askQuestion('conv-resume', {
+        question: '刷新测试',
+        selectedText: '',
+        contextBefore: '',
+        contextAfter: '',
+        chapterFile: '01-概述.md',
+      });
+
+      capturedSession._emit({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', delta: '先想' } });
+      const firstIterator = stream[Symbol.asyncIterator]();
+      expect(await firstIterator.next()).toEqual({ value: { type: 'thinking_delta', delta: '先想', index: 0 }, done: false });
+      await firstIterator.return();
+
+      expect(getActiveStream('conv-resume')?.status).toBe('streaming');
+      expect(capturedSession.dispose).not.toHaveBeenCalled();
+
+      capturedSession._emit({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: '答案' } });
+      capturedSession._emit({ type: 'agent_end' });
+
+      const resumed = subscribeToQuestion('conv-resume', 1);
+      const resumedEvents = [];
+      for await (const event of resumed) {
+        resumedEvents.push(event);
+      }
+
+      expect(resumedEvents).toEqual([
+        { type: 'text_delta', delta: '答案', index: 1 },
+        { type: 'done', index: 2 },
+      ]);
+      const snapshot = await waitForQuestion('conv-resume');
+      expect(snapshot.status).toBe('done');
+      expect(snapshot.text).toBe('答案');
+      expect(snapshot.thinking).toBe('先想');
     });
 
     it('should include context in the prompt', async () => {
@@ -352,8 +494,8 @@ describe('session-manager', () => {
   });
 
   describe('isPersistThinking', () => {
-    it('should return false by default', () => {
-      expect(isPersistThinking()).toBe(false);
+    it('should return true by default so refreshed conversations keep thinking blocks', () => {
+      expect(isPersistThinking()).toBe(true);
     });
 
     it('should return true when configured', () => {

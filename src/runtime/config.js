@@ -13,6 +13,7 @@ const DEFAULTS = Object.freeze({
     enabled: true,
     agentDir: 'config/ai-qa/omp/agent',
     historyDir: 'data/ai-qa',
+    persistThinking: true,
   }),
 });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import path from 'path';
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { mkdtemp, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { ROOT_DIR } from '../../src/core/server/config.js';
@@ -13,6 +13,7 @@ let historyDir;
 const ENABLED_BASE_URL = 'http://localhost:13002';
 const NO_AI_BASE_URL = 'http://localhost:13003';
 const FIXTURE_ROOT = path.join(ROOT_DIR, 'tests', 'fixtures');
+const PROJECT_AGENT_DIR = path.join(ROOT_DIR, 'config', 'ai-qa', 'omp', 'agent');
 const CONTENT_DEFAULT_HISTORY_FILE = path.join(FIXTURE_ROOT, 'data', 'ai-qa', 'sessions.json');
 const PACKAGE_DEFAULT_HISTORY_FILE = path.join(ROOT_DIR, 'data', 'ai-qa', 'sessions.json');
 
@@ -39,7 +40,11 @@ beforeAll(async () => {
   tmpRoot = await mkdtemp(path.join(tmpdir(), 'doc-pi-ai-qa-api-'));
   agentDir = path.join(tmpRoot, 'agent');
   historyDir = path.join(tmpRoot, 'ai-history');
-  mkdirSync(agentDir, { recursive: true });
+  if (existsSync(PROJECT_AGENT_DIR)) {
+    cpSync(PROJECT_AGENT_DIR, agentDir, { recursive: true });
+  } else {
+    mkdirSync(agentDir, { recursive: true });
+  }
   rmSync(CONTENT_DEFAULT_HISTORY_FILE, { force: true });
   rmSync(PACKAGE_DEFAULT_HISTORY_FILE, { force: true });
 
@@ -123,13 +128,13 @@ describe('AI QA API integration', () => {
     expect(data.session.messages.length).toBe(0);
     conversationId = data.session.id;
 
-    const configuredHistoryFile = path.join(historyDir, 'sessions.json');
+    const configuredHistoryFile = path.join(historyDir, 'sessions', `${conversationId}.json`);
     expect(existsSync(configuredHistoryFile)).toBe(true);
     expect(existsSync(CONTENT_DEFAULT_HISTORY_FILE)).toBe(false);
     expect(existsSync(PACKAGE_DEFAULT_HISTORY_FILE)).toBe(false);
 
     const history = JSON.parse(await readFile(configuredHistoryFile, 'utf-8'));
-    expect(history.sessions.some(session => session.id === conversationId)).toBe(true);
+    expect(history.id).toBe(conversationId);
   });
 
   it('GET /api/ai-qa/sessions should list conversations', async () => {
@@ -200,6 +205,8 @@ describe('AI QA API integration', () => {
     expect(resp.status).toBe(200);
     expect(resp.headers.get('content-type')).toContain('text/event-stream');
     const fullText = await resp.text();
+    const sessionMatch = fullText.match(/event: session\ndata: ({[^\n]+})/);
+    if (sessionMatch) conversationId = JSON.parse(sessionMatch[1]).id;
     expect(fullText).toContain('event: done');
     expect(fullText).not.toContain('请先在 AI 问答设置中配置并选择可用模型');
   }, 90000);
@@ -247,6 +254,7 @@ describe('AI QA API integration', () => {
   });
 
   it('GET /api/ai-qa/sessions/:id should return 404 after delete', async () => {
+    await new Promise(resolve => setTimeout(resolve, 300));
     const resp = await enabledApi(`/api/ai-qa/sessions/${conversationId}`);
     expect(resp.status).toBe(404);
   });
