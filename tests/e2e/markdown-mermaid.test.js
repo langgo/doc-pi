@@ -144,6 +144,50 @@ describe('Markdown and Mermaid E2E', () => {
     }
   }, 15000);
 
+  it('renders safe raw HTML including inline SVG elements', async () => {
+    const page = await browser.newPage();
+    try {
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.waitForSelector('.markdown-content svg.inline-diagram');
+      const state = await page.$eval('.markdown-content svg.inline-diagram', el => ({
+        tag: el.tagName.toLowerCase(),
+        viewBox: el.getAttribute('viewBox'),
+        role: el.getAttribute('role'),
+        title: el.querySelector('title')?.textContent,
+        hasStyle: !!el.querySelector('style'),
+        markerId: el.querySelector('marker')?.getAttribute('id'),
+        circleFill: getComputedStyle(el.querySelector('circle')).fill,
+        circleStroke: getComputedStyle(el.querySelector('circle')).stroke,
+        pathMarkerEnd: getComputedStyle(el.querySelector('path.svg-edge')).markerEnd,
+        styleText: el.querySelector('style')?.textContent || '',
+        text: el.querySelector('text')?.textContent,
+      }));
+      expect(state).toEqual({
+        tag: 'svg',
+        viewBox: '0 0 120 80',
+        role: 'img',
+        title: 'Inline SVG diagram',
+        hasStyle: true,
+        markerId: 'raw-html-arrow',
+        circleFill: 'rgb(9, 105, 218)',
+        circleStroke: 'rgb(36, 41, 47)',
+        pathMarkerEnd: 'url("#raw-html-arrow")',
+        styleText: state.styleText,
+        text: 'A',
+      });
+      expect(state.styleText).not.toContain('@import');
+      expect(state.styleText).not.toContain('javascript:');
+      expect(state.styleText).not.toContain('expression(');
+      const details = await page.$eval('.markdown-content details.raw-html-details', el => ({
+        summary: el.querySelector('summary')?.textContent,
+        body: el.querySelector('p')?.textContent,
+      }));
+      expect(details).toEqual({ summary: 'Raw HTML summary', body: 'Raw HTML body' });
+    } finally {
+      await page.close();
+    }
+  });
+
   it('does not execute raw HTML scripts from markdown', async () => {
     const page = await browser.newPage();
     try {
@@ -152,11 +196,27 @@ describe('Markdown and Mermaid E2E', () => {
       const state = await page.evaluate(() => ({
         script: window.__docPiMarkdownXss || 0,
         image: window.__docPiMarkdownImageXss || 0,
+        svg: window.__docPiMarkdownSvgXss || 0,
+        svgLink: window.__docPiMarkdownSvgLinkXss || 0,
+        cssImport: window.__docPiMarkdownCssImportXss || 0,
+        cssUrl: window.__docPiMarkdownCssUrlXss || 0,
+        cssExpression: window.__docPiMarkdownCssExpressionXss || 0,
+        foreignObject: window.__docPiMarkdownForeignObjectXss || 0,
         scriptTagCount: document.querySelectorAll('.markdown-content script').length,
+        foreignObjectCount: Array.from(document.querySelectorAll('.markdown-content foreignObject')).filter(el => !el.closest('.mermaid-container')).length,
+        javascriptHrefCount: Array.from(document.querySelectorAll('.markdown-content [href], .markdown-content [xlink\\:href]')).filter(el => !el.closest('.mermaid-container') && /javascript:/i.test(el.getAttribute('href') || el.getAttribute('xlink:href') || '')).length,
       }));
       expect(state.script).toBe(0);
       expect(state.image).toBe(0);
+      expect(state.svg).toBe(0);
+      expect(state.svgLink).toBe(0);
+      expect(state.cssImport).toBe(0);
+      expect(state.cssUrl).toBe(0);
+      expect(state.cssExpression).toBe(0);
+      expect(state.foreignObject).toBe(0);
       expect(state.scriptTagCount).toBe(0);
+      expect(state.foreignObjectCount).toBe(0);
+      expect(state.javascriptHrefCount).toBe(0);
     } finally {
       await page.close();
     }

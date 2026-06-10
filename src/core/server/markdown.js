@@ -141,6 +141,27 @@ function appendFootnotes(html, footnotes) {
   return html + list;
 }
 
+function sanitizeCss(css) {
+  return css
+    .replace(/@import\b[^;]*(?:;|$)/gi, '')
+    .replace(/url\(\s*(['"]?)\s*javascript:[^)]+\)/gi, 'url()')
+    .replace(/expression\s*\([^)]*\)/gi, '')
+    .replace(/javascript\s*:/gi, '');
+}
+
+function sanitizeMarkdownHtml(html) {
+  return html
+    .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (_, attrs, css) => '<style' + attrs + '>' + sanitizeCss(css) + '</style>')
+    .replace(/<(script|iframe|object|embed|foreignObject)\b[\s\S]*?<\/\1>/gi, '')
+    .replace(/<\/?(?:script|iframe|object|embed|foreignObject)\b[^>]*>/gi, '')
+    .replace(/<([a-z][\w:-]*)([^>]*)>/gi, (match, tag, attrs) => {
+      const safeAttrs = attrs
+        .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+        .replace(/\s+(?:href|src|xlink:href)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '');
+      return '<' + tag + safeAttrs + '>';
+    });
+}
+
 function secureExternalLinks(html) {
   return html.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
     const hrefMatch = attrs.match(/\s+href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
@@ -231,15 +252,7 @@ export async function processMarkdown(filePath) {
 
   // Process markdown
   let html = marked(mdContent);
-  html = html
-    .replace(/<script\b[\s\S]*?<\/script>/gi, '')
-    .replace(/<([a-z][\w:-]*)([^>]*)>/gi, (match, tag, attrs) => {
-      const safeAttrs = attrs
-        .replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-        .replace(/\s+href\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '')
-        .replace(/\s+src\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|javascript:[^\s>]+)/gi, '');
-      return '<' + tag + safeAttrs + '>';
-    });
+  html = sanitizeMarkdownHtml(html);
 
   html = renderReadingTime(readingStats) + renderFrontmatterMetadata(metadata) + html;
   html = secureExternalLinks(html);
@@ -265,7 +278,7 @@ export async function processMarkdown(filePath) {
       inSourceFence = !inSourceFence;
       continue;
     }
-    if (inSourceFence || !rawText || /^#{1,6}\s+/.test(rawText) || /^[-*+]\s+/.test(rawText)) continue;
+    if (inSourceFence || !rawText || /^#{1,6}\s+/.test(rawText) || /^[-*+]\s+/.test(rawText) || rawText.startsWith('.') || /[{};]/.test(rawText)) continue;
     const text = rawText.replace(/^>\s+/, '');
     const renderedText = escapeHtml(text).replace(/\*\*/g, '').replace(/`/g, '');
     html = html.replace(renderedText, '<span id="L' + sourceLine + '" class="doc-search-line-target" aria-label="搜索结果第 ' + sourceLine + ' 行" tabindex="-1"></span>' + renderedText);

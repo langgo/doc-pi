@@ -157,6 +157,31 @@ describe('markdown', () => {
       }
     });
 
+    it('should render safe raw HTML including SVG and remove dangerous SVG HTML', async () => {
+      const fs = await import('fs/promises');
+      const tmpPath = path.join(ROOT_DIR, 'data', 'test-raw-svg.md');
+      await fs.mkdir(path.join(ROOT_DIR, 'data'), { recursive: true });
+      await fs.writeFile(tmpPath, '<svg viewBox="0 0 10 10" onload="alert(1)"><defs><marker id="arrow"><path d="M0 0H1"></path></marker><style>@import url("javascript:alert(3)"); .node { fill: red; marker-end: url(#arrow); } .bad { background: url(javascript:alert(4)); width: expression(alert(5)); }</style></defs><circle class="node" cx="5" cy="5" r="4"></circle><a xlink:href="javascript:alert(2)"><path d="M0 0H1"></path></a><foreignObject><body>bad</body></foreignObject></svg>\n<details><summary>More</summary><p>Body</p></details>');
+      try {
+        const html = await processMarkdown(tmpPath);
+        expect(html).toContain('<svg viewBox="0 0 10 10">');
+        expect(html).toContain('<marker id="arrow">');
+        expect(html).toContain('<style>');
+        expect(html).toContain('.node { fill: red; marker-end: url(#arrow); }');
+        expect(html).toContain('<circle class="node" cx="5" cy="5" r="4">');
+        expect(html).toContain('<path d="M0 0H1">');
+        expect(html).toContain('<details>');
+        expect(html).toContain('<summary>More</summary>');
+        expect(html).not.toContain('onload');
+        expect(html).not.toContain('@import');
+        expect(html).not.toContain('javascript:');
+        expect(html).not.toContain('expression(');
+        expect(html).not.toContain('foreignObject');
+      } finally {
+        await fs.unlink(tmpPath);
+      }
+    });
+
     it('should render heading self-links for copyable anchors', async () => {
       const fs = await import('fs/promises');
       const tmpPath = path.join(ROOT_DIR, 'data', 'test-heading-anchor.md');

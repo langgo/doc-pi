@@ -23,8 +23,8 @@ describe('Core render E2E', () => {
       await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
       await page.waitForSelector('.reading-time');
       await page.waitForSelector('.chapter-position');
-      expect(await page.$eval('.reading-time', el => el.textContent.trim())).toBe('约 1 分钟阅读 · 98 字');
-      expect(await page.$eval('.reading-time', el => el.getAttribute('aria-label'))).toBe('预计阅读时间 1 分钟，约 98 字');
+      expect(await page.$eval('.reading-time', el => el.textContent.trim())).toBe('约 1 分钟阅读 · 150 字');
+      expect(await page.$eval('.reading-time', el => el.getAttribute('aria-label'))).toBe('预计阅读时间 1 分钟，约 150 字');
       const metadataLayout = await page.evaluate(() => {
         const reading = document.querySelector('.reading-time').getBoundingClientRect();
         const position = document.querySelector('.chapter-position').getBoundingClientRect();
@@ -935,7 +935,7 @@ describe('Core render E2E', () => {
         stats: item.querySelector('.doc-search-reading-stats')?.textContent,
       }));
       expect(result.tags).toEqual(['docs', 'guide']);
-      expect(result.stats).toBe('约 1 分钟 · 98 字');
+      expect(result.stats).toBe('约 1 分钟 · 150 字');
     } finally {
       await page.close();
     }
