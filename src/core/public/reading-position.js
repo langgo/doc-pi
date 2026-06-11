@@ -7,10 +7,6 @@
   var restored = false;
   var restoreEvent = 'doc-pi:restore-reading-position';
 
-  try {
-    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
-  } catch (_) {}
-
   function readStoredPosition() {
     try {
       var raw = window.localStorage.getItem(storageKey);
@@ -42,11 +38,50 @@
   }
 
   function restorePosition() {
-    if (restored || window.location.hash) return;
-    restored = true;
+    if (restored) return;
+
+    // Only skip restore for intentional hash navigation (user clicked a
+    // heading anchor link). On reload or back/forward, the hash is stale
+    // from the previous page state and we should restore the saved position.
+    if (window.location.hash) {
+      var navType = 'navigate';
+      try {
+        var entries = performance.getEntriesByType('navigation');
+        if (entries && entries.length) navType = entries[0].type;
+      } catch (_) {}
+      if (navType === 'navigate') {
+        restored = true;
+        return;
+      }
+    }
+
     var position = readStoredPosition();
-    if (!position) return;
-    window.scrollTo(0, Math.min(position, maxScrollTop()));
+    if (!position) { restored = true; return; }
+    restored = true;
+
+    function apply() {
+      var target = Math.min(position, maxScrollTop());
+      window.scrollTo(0, target);
+    }
+
+    // Apply after layout settles.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(apply);
+    });
+
+    // Browser may still restore scroll asynchronously after load
+    // even with scrollRestoration=manual. Override any scroll away
+    // from our target for a short window.
+    var scrollListener = function () {
+      var target = Math.min(position, maxScrollTop());
+      if (Math.abs((window.scrollY || 0) - target) > 2) {
+        window.scrollTo(0, target);
+      }
+    };
+    window.addEventListener('scroll', scrollListener, { passive: true });
+    setTimeout(function () {
+      window.removeEventListener('scroll', scrollListener);
+    }, 2000);
   }
 
   window.addEventListener(restoreEvent, function () {
@@ -55,7 +90,10 @@
   });
   window.addEventListener('scroll', scheduleSave, { passive: true });
   window.addEventListener('beforeunload', savePosition);
-  window.addEventListener('pageshow', restorePosition, { once: true });
-  window.addEventListener('load', restorePosition, { once: true });
-  if (document.readyState === 'complete' || document.readyState === 'interactive') restorePosition();
+
+  if (document.readyState === 'complete') {
+    restorePosition();
+  } else {
+    window.addEventListener('load', restorePosition);
+  }
 })();

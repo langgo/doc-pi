@@ -101,8 +101,9 @@ describe('AI QA plugin registration', () => {
 
         const createResp = await fetch(`${url}/api/ai-qa/sessions`, { method: 'POST' });
         expect(createResp.status).toBe(201);
-        const historyFile = path.join(historyDir, 'sessions.json');
-        expect(await Bun.file(historyFile).exists()).toBe(true);
+        const body = await createResp.json();
+        const sessionFile = path.join(historyDir, 'sessions', `${body.session.id}.json`);
+        expect(await Bun.file(sessionFile).exists()).toBe(true);
       });
     } finally {
       await rm(tmpRoot, { recursive: true, force: true });
