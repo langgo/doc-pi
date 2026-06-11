@@ -13,7 +13,7 @@ describe('Core render E2E', () => {
   }, 30000);
 
   afterAll(async () => {
-    if (browser) await browser.close();
+    if (browser) await Promise.race([browser.close(), new Promise(r => setTimeout(r, 5000))]);
     if (server) await server.stop();
   });
 
