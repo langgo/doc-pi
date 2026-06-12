@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'fs/promises';
+import { readdir, readFile } from 'fs/promises';
 import path from 'path';
 import { stripBOM, extractFrontmatter, analyzeReadingStats } from './markdown.js';
 

@@ -1,4 +1,4 @@
-import { readdir, stat } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import path from 'path';
 import { getContentRoot } from './runtime-state.js';
 import { escapeHtml } from './render.js';

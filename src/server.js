@@ -21,19 +21,20 @@ import createAiQaPlugin from './plugins/ai-qa/index.js';
 async function handleDirectory(rootDir, dirPath = '') {
   const fullDir = path.join(rootDir, dirPath);
   const readmePath = path.join(fullDir, 'README.md');
+  const currentFile = dirPath ? dirPath + '/README.md' : 'README.md';
   let html;
   try {
     html = await processMarkdown(readmePath);
   } catch {
-    // No README.md — render a directory listing
-    const tree = await getChapterTree(fullDir);
-    const tocHtml = await buildFileListToc(fullDir, '');
+    // No README.md — render a directory listing with full tree TOC
+    const tocCurrent = dirPath ? dirPath + '/' : '';
+    const tocHtml = await buildFileListToc(rootDir, tocCurrent);
     const pluginInjections = await collectPluginInjections('');
     return renderHtml({ title: dirPath || 'Index', content: '<div class="markdown-content"></div>', tocHtml, currentFile: '', pluginInjections });
   }
-  const tocHtml = await buildFileListToc(fullDir, 'README.md');
-  const pluginInjections = await collectPluginInjections(dirPath ? dirPath + '/README.md' : 'README.md');
-  return renderHtml({ title: 'README.md', content: html, tocHtml, currentFile: dirPath ? dirPath + '/README.md' : 'README.md', pluginInjections });
+  const tocHtml = await buildFileListToc(rootDir, currentFile);
+  const pluginInjections = await collectPluginInjections(currentFile);
+  return renderHtml({ title: 'README.md', content: html, tocHtml, currentFile, pluginInjections });
 }
 
 async function handleMarkdown(filePath, chapterFiles, pluginInjections) {

@@ -33,7 +33,10 @@ export async function loadComments(file) {
 
 export async function saveComments(file, data) {
   await ensureDir();
-  await writeFile(jsonFile(file), JSON.stringify(data, null, 2), 'utf-8');
+  const jf = jsonFile(file);
+  const dir = path.dirname(jf);
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+  await writeFile(jf, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 // Return chapters that have at least one comment, with count and latest timestamp.
