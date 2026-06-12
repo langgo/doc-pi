@@ -13,7 +13,6 @@ describe('Core render E2E', () => {
   }, 30000);
 
   afterAll(async () => {
-    if (browser) await Promise.race([browser.close(), new Promise(r => setTimeout(r, 5000))]);
     if (server) await server.stop();
   });
 
@@ -132,6 +131,45 @@ describe('Core render E2E', () => {
         window.dispatchEvent(new Event('doc-pi:restore-reading-position'));
       });
 
+      await page.waitForFunction(() => {
+        const calls = window.__docPiScrollToCalls;
+        return calls && calls.length > 0 && calls.some(c => c >= 390);
+      });
+      const calls = await page.evaluate(() => window.__docPiScrollToCalls);
+      expect(calls.some(c => c >= 390)).toBe(true);
+    } finally {
+      await page.close();
+    }
+  });
+
+    it('restores reading position on reload even when URL has a hash', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewportSize({ width: 900, height: 360 });
+      await gotoFixture(page, server.baseUrl, '/rich-markdown.md');
+      await page.evaluate(() => window.scrollTo(0, 400));
+      await page.waitForFunction(() => window.scrollY >= 390);
+      await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+      await page.waitForFunction(() => {
+        const v = localStorage.getItem('doc-pi:reading-position:/rich-markdown.md');
+        return v && Number(v) >= 390;
+      });
+      await page.evaluate(() => {
+        history.replaceState(null, '', '#code');
+        const origGetEntries = performance.getEntriesByType.bind(performance);
+        performance.getEntriesByType = function (type) {
+          if (type === 'navigation') return [{ type: 'reload' }];
+          return origGetEntries(type);
+        };
+        window.__docPiScrollToCalls = [];
+        const origScrollTo = window.scrollTo.bind(window);
+        window.scrollTo = function (x, y) {
+          const top = typeof x === 'object' ? x.top : y;
+          window.__docPiScrollToCalls.push(top);
+          return origScrollTo(x, y);
+        };
+        window.dispatchEvent(new Event('doc-pi:restore-reading-position'));
+      });
       await page.waitForFunction(() => {
         const calls = window.__docPiScrollToCalls;
         return calls && calls.length > 0 && calls.some(c => c >= 390);
