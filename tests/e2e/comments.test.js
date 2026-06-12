@@ -19,7 +19,6 @@ beforeAll(async () => {
 }, 30000);
 
 afterAll(async () => {
-  if (browser) await browser.close();
   if (server) await server.stop();
 });
 

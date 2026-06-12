@@ -13,7 +13,6 @@ describe('Markdown and Mermaid E2E', () => {
   }, 30000);
 
   afterAll(async () => {
-    if (browser) await browser.close();
     if (server) await server.stop();
   });
 

@@ -13,7 +13,6 @@ describe('Core selection and annotation E2E', () => {
   }, 30000);
 
   afterAll(async () => {
-    if (browser) await browser.close();
     if (server) await server.stop();
   });
 

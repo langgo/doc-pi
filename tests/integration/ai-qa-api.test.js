@@ -242,6 +242,10 @@ describe('AI QA API integration', () => {
 
   // ── Delete ────────────────────────────────────────────────────────────
   it('DELETE /api/ai-qa/sessions/:id should delete conversation', async () => {
+    // Wait for the chat handler's async finally block (waitForQuestion →
+    // updateMessage) to finish before deleting, otherwise the file may be
+    // re-created after deletion.
+    await new Promise(resolve => setTimeout(resolve, 1000));
     const resp = await enabledApi(`/api/ai-qa/sessions/${conversationId}`, { method: 'DELETE' });
     expect(resp.status).toBe(200);
     const data = await resp.json();
@@ -254,7 +258,6 @@ describe('AI QA API integration', () => {
   });
 
   it('GET /api/ai-qa/sessions/:id should return 404 after delete', async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
     const resp = await enabledApi(`/api/ai-qa/sessions/${conversationId}`);
     expect(resp.status).toBe(404);
   });

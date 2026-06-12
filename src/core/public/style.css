@@ -976,7 +976,6 @@ body {
 .markdown-content pre code {
   background: none;
   padding: 0;
-  color: #1f2328;
   font-size: inherit;
   line-height: inherit;
   border-radius: 0;
@@ -1234,8 +1233,6 @@ body {
   .main { margin-left: 0; max-width: 100vw; }
   .content-wrap { padding: 1rem; }
 }
-
-.hljs { background: transparent !important; }
 
 /* Print */
 @media print {

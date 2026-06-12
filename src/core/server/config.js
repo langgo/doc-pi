@@ -19,4 +19,11 @@ marked.setOptions({
   gfm: true
 });
 
+// marked v18 renderer hardcodes 'language-' prefix; patch to add hljs class.
+const origCode = marked.Renderer.prototype.code;
+marked.Renderer.prototype.code = function (token) {
+  const html = origCode.call(this, token);
+  return html.replace(/<code class="language-/, '<code class="hljs language-');
+};
+
 export { marked };
