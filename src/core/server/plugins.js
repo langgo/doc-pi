@@ -33,6 +33,25 @@ export function getPlugins() {
 function matchRoute(pattern, pathname) {
   const patternParts = pattern.split('/');
   const pathParts = pathname.split('/');
+
+  // If the last pattern segment is a :param, allow it to capture multiple path segments
+  const lastPattern = patternParts[patternParts.length - 1];
+  if (lastPattern && lastPattern.startsWith(':')) {
+    if (pathParts.length < patternParts.length) return null;
+    const params = {};
+    for (let i = 0; i < patternParts.length - 1; i++) {
+      if (patternParts[i].startsWith(':')) {
+        params[patternParts[i].slice(1)] = decodeURIComponent(pathParts[i]);
+      } else if (patternParts[i] !== pathParts[i]) {
+        return null;
+      }
+    }
+    // Capture remaining segments as the last param
+    const remaining = pathParts.slice(patternParts.length - 1);
+    params[lastPattern.slice(1)] = decodeURIComponent(remaining.join('/'));
+    return params;
+  }
+
   if (patternParts.length !== pathParts.length) return null;
   const params = {};
   for (let i = 0; i < patternParts.length; i++) {

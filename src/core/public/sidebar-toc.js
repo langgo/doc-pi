@@ -115,3 +115,20 @@
     if (link) setActive(link);
   }
 })();
+
+// === Tree TOC expand/collapse ===
+(function() {
+  document.querySelectorAll('.toc-dir-toggle').forEach(function(toggle) {
+    toggle.addEventListener('click', function() {
+      var parent = toggle.parentElement;
+      parent.classList.toggle('toc-dir-expanded');
+      toggle.setAttribute('aria-expanded', parent.classList.contains('toc-dir-expanded'));
+    });
+    toggle.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle.click();
+      }
+    });
+  });
+})();

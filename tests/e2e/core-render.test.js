@@ -1347,12 +1347,10 @@ describe('Core render E2E', () => {
       await gotoFixture(page, server.baseUrl, '/sample-chapter.md');
       const activeChapter = await page.$eval('.toc-nav a.chapter-active', el => ({
         href: el.getAttribute('href'),
-        position: el.querySelector('.toc-chapter-position')?.textContent,
-        positionLabel: el.querySelector('.toc-chapter-position')?.getAttribute('aria-label'),
+        title: el.querySelector('.toc-chapter-title')?.textContent,
       }));
       expect(activeChapter.href).toBe('/sample-chapter.md');
-      expect(activeChapter.position).toBe('2/2');
-      expect(activeChapter.positionLabel).toBe('当前第 2 章，共 2 章');
+      expect(activeChapter.title).toBe('sample-chapter');
     } finally {
       await page.close();
     }

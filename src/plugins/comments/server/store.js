@@ -15,7 +15,8 @@ async function ensureDir() {
 }
 
 function jsonFile(file) {
-  const base = path.basename(file, '.md');
+  // Preserve directory structure: subdir/file.md → subdir/file.json
+  const base = file.replace(/\.md$/, '');
   return path.join(commentsDir(), `${base}.json`);
 }
 
@@ -32,40 +33,51 @@ export async function loadComments(file) {
 
 export async function saveComments(file, data) {
   await ensureDir();
-  await writeFile(jsonFile(file), JSON.stringify(data, null, 2), 'utf-8');
+  const jf = jsonFile(file);
+  const dir = path.dirname(jf);
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+  await writeFile(jf, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 // Return chapters that have at least one comment, with count and latest timestamp.
 // Each entry: { file, count, latestAt }
-// file is the chapter filename (e.g. "01-概述.md") reconstructed from the JSON basename.
+// file is the chapter filename (e.g. "01-概述.md" or "subdir/01-概述.md") reconstructed from the JSON path.
 export async function getCommentSummary() {
   await ensureDir();
   const chapters = [];
-  let entries;
-  try {
-    entries = await readdir(commentsDir());
-  } catch {
-    return chapters;
-  }
-  for (const entry of entries) {
-    if (!entry.endsWith('.json')) continue;
-    const jsonPath = path.join(commentsDir(), entry);
-    let data;
+
+  async function scanDir(dir, prefix = '') {
+    let entries;
     try {
-      data = JSON.parse(await readFile(jsonPath, 'utf-8'));
+      entries = await readdir(dir, { withFileTypes: true });
     } catch {
-      continue;
+      return;
     }
-    if (!data || !Array.isArray(data.comments) || data.comments.length === 0) continue;
-    const base = entry.replace(/\.json$/, '');
-    // Reconstruct chapter filename: the stored JSON basename is the chapter basename without .md
-    const file = base + '.md';
-    let latestAt = '';
-    for (const c of data.comments) {
-      if (c.createdAt && c.createdAt > latestAt) latestAt = c.createdAt;
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        await scanDir(path.join(dir, entry.name), prefix + entry.name + '/');
+      } else if (entry.isFile() && entry.name.endsWith('.json')) {
+        const jsonPath = path.join(dir, entry.name);
+        let data;
+        try {
+          data = JSON.parse(await readFile(jsonPath, 'utf-8'));
+        } catch {
+          continue;
+        }
+        if (!data || !Array.isArray(data.comments) || data.comments.length === 0) continue;
+        const base = entry.name.replace(/\.json$/, '');
+        const file = prefix + base + '.md';
+        let latestAt = '';
+        for (const c of data.comments) {
+          if (c.createdAt && c.createdAt > latestAt) latestAt = c.createdAt;
+        }
+        chapters.push({ file, count: data.comments.length, latestAt });
+      }
     }
-    chapters.push({ file, count: data.comments.length, latestAt });
   }
+
+  await scanDir(commentsDir());
+
   // Sort by latestAt descending so most recently commented chapters appear first
   chapters.sort((a, b) => {
     if (a.latestAt > b.latestAt) return -1;

@@ -1,22 +1,72 @@
 import { readdir } from 'fs/promises';
+import path from 'path';
 import { getContentRoot } from './runtime-state.js';
 import { escapeHtml } from './render.js';
 
-// Auto-discover chapter files from filesystem (sorted by filename)
+// ── Recursive file discovery ────────────────────────────────────────────────
+
+/**
+ * Recursively discover markdown files and directories.
+ * Returns a tree: [{ path, name, type: 'file'|'dir', children? }]
+ * Sorted: README.md first, then localeCompare. Directories before files.
+ */
+export async function getChapterTree(rootDir = getContentRoot()) {
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  const result = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      // Skip hidden dirs and common non-content dirs
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+      const children = await getChapterTree(fullPath);
+      if (children.length > 0) {
+        result.push({ path: entry.name + '/', name: entry.name, type: 'dir', children });
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'AGENTS.md') {
+      result.push({ path: entry.name, name: entry.name.replace(/\.md$/, ''), type: 'file' });
+    }
+  }
+
+  result.sort((a, b) => {
+    // README.md first
+    if (a.path === 'README.md') return -1;
+    if (b.path === 'README.md') return 1;
+    // Directories before files
+    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return result;
+}
+
+/**
+ * Flatten a chapter tree into a sorted list of relative file paths.
+ * Used for prev/next navigation and chapter position.
+ */
+export function flattenChapterTree(tree, prefix = '') {
+  const result = [];
+  for (const node of tree) {
+    if (node.type === 'file') {
+      result.push(prefix + node.path);
+    } else if (node.type === 'dir') {
+      result.push(...flattenChapterTree(node.children, prefix + node.path));
+    }
+  }
+  return result;
+}
+
+// ── Legacy flat API (kept for backward compat) ──────────────────────────────
+
 export async function getChapterFiles(rootDir = getContentRoot()) {
-  const files = await readdir(rootDir);
-  return files
-    .filter(f => f.endsWith('.md') && f !== 'AGENTS.md')
-    .sort((a, b) => {
-      if (a === 'README.md') return -1;
-      if (b === 'README.md') return 1;
-      return a.localeCompare(b);
-    });
+  return flattenChapterTree(await getChapterTree(rootDir));
 }
 
 export function getReadableChapterFiles(chapterFiles) {
   return chapterFiles.filter(function (file) { return file !== 'README.md'; });
 }
+
+// ── Chapter position ────────────────────────────────────────────────────────
 
 export function getChapterPosition(currentFile, chapterFiles, className = 'chapter-position') {
   const readableFiles = getReadableChapterFiles(chapterFiles);
@@ -26,6 +76,8 @@ export function getChapterPosition(currentFile, chapterFiles, className = 'chapt
   const totalChapters = readableFiles.length;
   return `<div class="${className}" aria-label="当前第 ${currentChapter} 章，共 ${totalChapters} 章">第 ${currentChapter} / ${totalChapters} 章</div>`;
 }
+
+// ── Chapter navigation (prev/next) ──────────────────────────────────────────
 
 export function getChapterNav(currentFile, chapterFiles, options = {}) {
   const idx = chapterFiles.indexOf(currentFile);
@@ -59,19 +111,32 @@ export function getChapterNav(currentFile, chapterFiles, options = {}) {
   return `<nav class="${className}"${aria}>${parts.join('')}</nav>`;
 }
 
-export async function buildFileListToc(rootDir = getContentRoot(), currentFile = '') {
-  const files = await readdir(rootDir);
-  const mdFiles = files.filter(f => f.endsWith('.md') && f !== 'AGENTS.md' && f !== 'README.md');
-  // Numbered chapters sorted by filename
-  mdFiles.sort((a, b) => a.localeCompare(b));
+// ── Tree-based TOC ──────────────────────────────────────────────────────────
+
+function buildTocTreeHtml(nodes, currentFile, prefix = '', depth = 0) {
+  if (!nodes || nodes.length === 0) return '';
   let html = '<ul>';
-  for (let i = 0; i < mdFiles.length; i += 1) {
-    const f = mdFiles[i];
-    const name = f.replace(/\.md$/, '');
-    const activeClass = f === currentFile ? ' toc-current chapter-active' : '';
-    const position = f === currentFile ? `<span class="toc-chapter-position" aria-label="当前第 ${i + 1} 章，共 ${mdFiles.length} 章">${i + 1}/${mdFiles.length}</span>` : '';
-    html += `<li><a href="/${f}" class="toc-h1${activeClass}"><span class="toc-chapter-title">${escapeHtml(name)}</span>${position}</a></li>`;
+  for (const node of nodes) {
+    const fullPath = prefix + node.path;
+    if (node.type === 'dir') {
+      const childrenHtml = buildTocTreeHtml(node.children, currentFile, fullPath, depth + 1);
+      const isExpanded = currentFile.startsWith(fullPath);
+      html += `<li class="toc-dir${isExpanded ? ' toc-dir-expanded' : ''}">`;
+      html += `<span class="toc-dir-toggle" role="button" tabindex="0" aria-expanded="${isExpanded}">${escapeHtml(node.name)}</span>`;
+      html += childrenHtml;
+      html += '</li>';
+    } else {
+      const activeClass = fullPath === currentFile ? ' toc-current chapter-active' : '';
+      html += `<li><a href="/${fullPath}" class="toc-h1${activeClass}"><span class="toc-chapter-title">${escapeHtml(node.name)}</span></a></li>`;
+    }
   }
   html += '</ul>';
   return html;
+}
+
+export async function buildFileListToc(rootDir = getContentRoot(), currentFile = '') {
+  const tree = await getChapterTree(rootDir);
+  // Filter out README.md from TOC (it's the index page)
+  const filtered = tree.filter(n => n.path !== 'README.md');
+  return buildTocTreeHtml(filtered, currentFile);
 }
