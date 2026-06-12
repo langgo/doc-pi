@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'fs/promises';
+import { readdir, readFile, stat } from 'fs/promises';
 import path from 'path';
 import { stripBOM, extractFrontmatter, analyzeReadingStats } from './markdown.js';
 
@@ -22,6 +22,22 @@ function parseQuery(query) {
   return { normalized, text: terms.join(' '), tags };
 }
 
+async function discoverMarkdownFiles(rootDir, prefix = '') {
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+    const fullPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      const children = await discoverMarkdownFiles(fullPath, prefix + entry.name + '/');
+      files.push(...children);
+    } else if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'AGENTS.md') {
+      files.push({ file: prefix + entry.name, fullPath });
+    }
+  }
+  return files.sort((a, b) => a.file.localeCompare(b.file));
+}
+
 export async function searchMarkdownFiles(rootDir, query, options = {}) {
   const parsed = parseQuery(query);
   const normalized = parsed.normalized;
@@ -29,13 +45,10 @@ export async function searchMarkdownFiles(rootDir, query, options = {}) {
   if (!normalized || !parsed.text) return { query: normalized, results: [] };
 
   const needle = parsed.text.toLowerCase();
-  const files = (await readdir(rootDir))
-    .filter(file => file.endsWith('.md') && file !== 'AGENTS.md')
-    .sort((a, b) => a.localeCompare(b));
+  const files = await discoverMarkdownFiles(rootDir);
   const results = [];
 
-  for (const file of files) {
-    const fullPath = path.join(rootDir, file);
+  for (const { file, fullPath } of files) {
     const rawContent = stripBOM(await readFile(fullPath, 'utf-8'));
     const frontmatter = extractFrontmatter(rawContent);
     const content = frontmatter.mdContent;

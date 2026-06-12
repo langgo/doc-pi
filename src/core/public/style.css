@@ -615,6 +615,33 @@ body {
 .toc-nav .toc-h3 { padding-left: 2rem; font-size: 0.6875rem; }
 .toc-nav .toc-h4 { padding-left: 2.75rem; font-size: 0.6875rem; color: #8b949e; }
 
+/* Tree TOC: directory nodes */
+.toc-nav .toc-dir { margin: 0; }
+.toc-nav .toc-dir-toggle {
+  display: block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #656d76;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+}
+.toc-nav .toc-dir-toggle:hover { background: #ddf4ff; color: #0969da; }
+.toc-nav .toc-dir-toggle::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform 0.15s;
+  font-size: 0.625rem;
+  width: 1em;
+}
+.toc-nav .toc-dir-expanded > .toc-dir-toggle::before {
+  transform: rotate(90deg);
+}
+.toc-nav .toc-dir > ul { display: none; }
+.toc-nav .toc-dir-expanded > ul { display: block; }
+.toc-nav .toc-dir ul { padding-left: 0.75rem; }
+
 /* Main content */
 .main {
   margin-left: 260px;

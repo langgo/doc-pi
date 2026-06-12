@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdtemp, rm, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { tmpdir } from 'os';
-import { getChapterFiles, getChapterNav, getChapterPosition, buildFileListToc } from '../navigation.js';
+import { getChapterFiles, getChapterNav, getChapterPosition, buildFileListToc, getChapterTree, flattenChapterTree } from '../navigation.js';
 
 let fixtureRoot;
 
@@ -106,11 +106,95 @@ describe('navigation', () => {
       expect(html).not.toContain('AGENTS');
     });
 
-    it('should show the active sidebar chapter position', async () => {
+    it('should mark the current chapter as active', async () => {
       const html = await buildFileListToc(fixtureRoot, '02-B.md');
-      expect(html).toContain('class="toc-chapter-position"');
-      expect(html).toContain('aria-label="当前第 2 章，共 2 章"');
-      expect(html).toContain('2/2');
+      expect(html).toContain('toc-current');
+      expect(html).toContain('chapter-active');
+      expect(html).toContain('02-B');
+    });
+  });
+
+  describe('nested directories', () => {
+    let nestedRoot;
+
+    beforeAll(async () => {
+      nestedRoot = await mkdtemp(path.join(tmpdir(), 'doc-pi-nav-nested-'));
+      await mkdir(path.join(nestedRoot, 'chapter-01'));
+      await mkdir(path.join(nestedRoot, 'chapter-02'));
+      await writeFile(path.join(nestedRoot, 'README.md'), '# Root\n');
+      await writeFile(path.join(nestedRoot, 'chapter-01', 'intro.md'), '# Intro\n');
+      await writeFile(path.join(nestedRoot, 'chapter-01', 'setup.md'), '# Setup\n');
+      await writeFile(path.join(nestedRoot, 'chapter-02', 'advanced.md'), '# Advanced\n');
+    });
+
+    afterAll(async () => {
+      if (nestedRoot) await rm(nestedRoot, { recursive: true, force: true });
+    });
+
+    it('should discover files recursively with getChapterTree', async () => {
+      const tree = await getChapterTree(nestedRoot);
+      expect(tree.length).toBe(3); // README.md + 2 dirs
+      expect(tree[0].path).toBe('README.md');
+      expect(tree[0].type).toBe('file');
+      expect(tree[1].path).toBe('chapter-01/');
+      expect(tree[1].type).toBe('dir');
+      expect(tree[1].children.length).toBe(2);
+      expect(tree[1].children[0].path).toBe('intro.md');
+      expect(tree[1].children[1].path).toBe('setup.md');
+      expect(tree[2].path).toBe('chapter-02/');
+      expect(tree[2].type).toBe('dir');
+      expect(tree[2].children.length).toBe(1);
+      expect(tree[2].children[0].path).toBe('advanced.md');
+    });
+
+    it('should flatten tree to sorted file paths', async () => {
+      const tree = await getChapterTree(nestedRoot);
+      const flat = flattenChapterTree(tree);
+      expect(flat).toEqual([
+        'README.md',
+        'chapter-01/intro.md',
+        'chapter-01/setup.md',
+        'chapter-02/advanced.md',
+      ]);
+    });
+
+    it('should return flat file list from getChapterFiles', async () => {
+      const files = await getChapterFiles(nestedRoot);
+      expect(files[0]).toBe('README.md');
+      expect(files).toContain('chapter-01/intro.md');
+      expect(files).toContain('chapter-01/setup.md');
+      expect(files).toContain('chapter-02/advanced.md');
+    });
+
+    it('should build tree TOC with directory nodes', async () => {
+      const html = await buildFileListToc(nestedRoot);
+      expect(html).toContain('toc-dir');
+      expect(html).toContain('toc-dir-toggle');
+      expect(html).toContain('chapter-01');
+      expect(html).toContain('chapter-02');
+      expect(html).toContain('href="/chapter-01/intro.md"');
+      expect(html).toContain('href="/chapter-01/setup.md"');
+      expect(html).toContain('href="/chapter-02/advanced.md"');
+      // Should not include README.md in TOC
+      expect(html).not.toContain('README');
+    });
+
+    it('should expand directory containing current file', async () => {
+      const html = await buildFileListToc(nestedRoot, 'chapter-01/intro.md');
+      expect(html).toContain('toc-dir-expanded');
+      expect(html).toContain('aria-expanded="true"');
+    });
+
+    it('should support prev/next navigation across directories', () => {
+      const chapters = [
+        'README.md',
+        'chapter-01/intro.md',
+        'chapter-01/setup.md',
+        'chapter-02/advanced.md',
+      ];
+      const nav = getChapterNav('chapter-01/intro.md', chapters);
+      expect(nav).toContain('href="/README.md"');
+      expect(nav).toContain('href="/chapter-01/setup.md"');
     });
   });
 });

@@ -1,6 +1,6 @@
 import { createServer } from 'http';
 import { mkdir, readFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import path from 'path';
 import boxen from 'boxen';
 import gradient from 'gradient-string';
@@ -14,30 +14,41 @@ import { getChapterFiles, getChapterNav, getChapterPosition, buildFileListToc } 
 import { registerPlugin, resetPlugins, tryPluginApiRoutes, collectPluginInjections } from './core/server/plugins.js';
 import { searchMarkdownFiles } from './core/server/search.js';
 import { json, resolveSafePath, serveStatic } from './core/server/server.js';
-import { setRuntimeConfig, getPackageSrcDir } from './core/server/runtime-state.js';
+import { setRuntimeConfig, getPackageSrcDir, getRuntimeConfig } from './core/server/runtime-state.js';
 import commentsPlugin from './plugins/comments/index.js';
 import createAiQaPlugin from './plugins/ai-qa/index.js';
 
-async function handleDirectory(rootDir) {
-  const readmePath = path.join(rootDir, 'README.md');
-  const html = await processMarkdown(readmePath);
-  const tocHtml = await buildFileListToc(rootDir, 'README.md');
-  const pluginInjections = await collectPluginInjections('README.md');
-  return renderHtml({ title: 'README.md', content: html, tocHtml, currentFile: 'README.md', pluginInjections });
+async function handleDirectory(rootDir, dirPath = '') {
+  const fullDir = path.join(rootDir, dirPath);
+  const readmePath = path.join(fullDir, 'README.md');
+  let html;
+  try {
+    html = await processMarkdown(readmePath);
+  } catch {
+    // No README.md — render a directory listing
+    const tree = await getChapterTree(fullDir);
+    const tocHtml = await buildFileListToc(fullDir, '');
+    const pluginInjections = await collectPluginInjections('');
+    return renderHtml({ title: dirPath || 'Index', content: '<div class="markdown-content"></div>', tocHtml, currentFile: '', pluginInjections });
+  }
+  const tocHtml = await buildFileListToc(fullDir, 'README.md');
+  const pluginInjections = await collectPluginInjections(dirPath ? dirPath + '/README.md' : 'README.md');
+  return renderHtml({ title: 'README.md', content: html, tocHtml, currentFile: dirPath ? dirPath + '/README.md' : 'README.md', pluginInjections });
 }
 
 async function handleMarkdown(filePath, chapterFiles, pluginInjections) {
   const html = await processMarkdown(filePath);
-  const currentFile = path.basename(filePath);
+  const rootDir = getRuntimeConfig().rootDir;
+  const currentFile = path.relative(rootDir, filePath);
 
   let mdContent = await readFile(filePath, 'utf-8');
   mdContent = stripBOM(mdContent);
   const frontmatterResult = extractFrontmatter(mdContent);
   mdContent = frontmatterResult.mdContent;
   const headings = extractToc(mdContent);
-  const tocHtml = buildTocHtml(headings, currentFile) + await buildFileListToc(path.dirname(filePath), currentFile);
+  const tocHtml = buildTocHtml(headings, currentFile) + await buildFileListToc(rootDir, currentFile);
 
-  const title = frontmatterResult.metadata?.title || currentFile;
+  const title = frontmatterResult.metadata?.title || path.basename(currentFile);
   const chapterNav = getChapterNav(currentFile, chapterFiles);
   const chapterPosition = getChapterPosition(currentFile, chapterFiles);
   const bottomChapterNav = getChapterNav(currentFile, chapterFiles, { position: 'bottom', withLabels: true });
@@ -116,6 +127,20 @@ export function createDocPiServer(runtimeConfig) {
       return;
     }
 
+    // Handle directory URLs: render README.md if present, otherwise directory listing
+    if (statSync(safePath).isDirectory()) {
+      try {
+        const html = await handleDirectory(rootDir, decodedPath.replace(/^\/+/, ''));
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(html);
+        return;
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(`Server error: ${err.message}`);
+        return;
+      }
+    }
+
     if (decodedPath.endsWith('.md')) {
       try {
         if (searchParams.has('raw')) {
@@ -125,7 +150,8 @@ export function createDocPiServer(runtimeConfig) {
           return;
         }
         const chapterFiles = await getChapterFiles(rootDir);
-        const pluginInjections = await collectPluginInjections(path.basename(safePath));
+        const relativePath = path.relative(rootDir, safePath);
+        const pluginInjections = await collectPluginInjections(relativePath);
         const html = await handleMarkdown(safePath, chapterFiles, pluginInjections);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(html);
